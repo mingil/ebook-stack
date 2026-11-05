@@ -96,6 +96,9 @@ services:
       - /volume1/data/ebooks:/data:rw
       - /volume1/data/ebooks/calibre-library:/calibre-library:rw
       - /volume1/docker/komga/data:/legacy-komga-data:rw
+    depends_on:
+      ebook-control-center:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:25600/actuator/health >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:25600/actuator/health >/dev/null 2>&1 || bash -c '</dev/tcp/127.0.0.1/25600' >/dev/null 2>&1 || exit 1"]
       interval: 30s
@@ -138,6 +141,9 @@ services:
       - /volume1/data/ebooks/books:/books:rw
       - /volume1/data/ebooks/calibre-library:/calibre-library:rw
       - /volume1/docker/kavita/data:/legacy-kavita-manga:rw
+    depends_on:
+      ebook-control-center:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:5000/api/health >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:5000/api/health >/dev/null 2>&1 || bash -c '</dev/tcp/127.0.0.1/5000' >/dev/null 2>&1 || exit 1"]
       interval: 30s
@@ -183,6 +189,9 @@ services:
       - /volume1/data/ebooks/lightnovels:/lightnovels:rw
       - /volume1/data/ebooks/calibre-library:/calibre-library:rw
       - /volume1/docker/audiobookshelf/audiobooks:/legacy-audiobooks:rw
+    depends_on:
+      ebook-control-center:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "nc -z 127.0.0.1 80 >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:80/ping >/dev/null 2>&1 || exit 1"]
       interval: 20s
@@ -226,6 +235,8 @@ services:
     volumes:
       - /volume1/docker/komf/config:/config:rw
     depends_on:
+      ebook-control-center:
+        condition: service_healthy
       komga:
         condition: service_healthy
       kavita:

@@ -51,9 +51,9 @@ UPSTREAM_MAINTAINERS: Dict[str, Dict[str, str]] = {
         "tag": "latest",
     },
     "cwa-book-downloader": {
-        "maintainer": "CWA Book Downloader 공식 팀",
-        "registry": "GitHub Container Registry (GHCR)",
-        "update_channel": "공식 릴리즈 (:latest)",
+        "maintainer": "Calibrain (Shelfmark / CWA Book Downloader 공식 팀)",
+        "registry": "GitHub Container Registry (ghcr.io/calibrain)",
+        "update_channel": "공식 안정판 릴리즈 (:latest)",
         "hub_repo": "",
         "tag": "latest",
     },
@@ -67,9 +67,9 @@ UPSTREAM_MAINTAINERS: Dict[str, Dict[str, str]] = {
     "readarr": {
         "maintainer": "LinuxServer.io 공식 패키징 팀",
         "registry": "LinuxServer Registry (lscr.io)",
-        "update_channel": "공식 Develop 브랜치 (:develop)",
+        "update_channel": "공식 Nightly 브랜치 (:nightly)",
         "hub_repo": "linuxserver/readarr",
-        "tag": "develop",
+        "tag": "nightly",
     },
     "stirling-pdf": {
         "maintainer": "Stirling-Tools 공식 오픈소스 팀",

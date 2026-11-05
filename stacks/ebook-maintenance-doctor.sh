@@ -48,9 +48,9 @@ else
     "advplyr/audiobookshelf:latest" \
     "sndxr/komf:latest" \
     "crocodilestick/calibre-web-automated:latest" \
-    "ghcr.io/calibre-web-automated-book-downloader/calibre-web-automated-book-downloader:latest" \
+    "ghcr.io/calibrain/calibre-web-automated-book-downloader:latest" \
     "ghcr.io/suwayomi/tachidesk:latest" \
-    "lscr.io/linuxserver/readarr:develop" \
+    "lscr.io/linuxserver/readarr:nightly" \
     "frooodle/s-pdf:latest" \
     "ghcr.io/flaresolverr/flaresolverr:latest"; do
     docker pull "$img" 2>/dev/null || true

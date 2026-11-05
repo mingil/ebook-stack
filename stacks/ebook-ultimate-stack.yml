@@ -96,6 +96,9 @@ services:
       - /volume1/data/ebooks:/data:rw
       - /volume1/data/ebooks/calibre-library:/calibre-library:rw
       - /volume1/docker/komga/data:/legacy-komga-data:rw
+    depends_on:
+      ebook-control-center:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:25600/actuator/health >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:25600/actuator/health >/dev/null 2>&1 || bash -c '</dev/tcp/127.0.0.1/25600' >/dev/null 2>&1 || exit 1"]
       interval: 30s
@@ -138,6 +141,9 @@ services:
       - /volume1/data/ebooks/books:/books:rw
       - /volume1/data/ebooks/calibre-library:/calibre-library:rw
       - /volume1/docker/kavita/data:/legacy-kavita-manga:rw
+    depends_on:
+      ebook-control-center:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:5000/api/health >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:5000/api/health >/dev/null 2>&1 || bash -c '</dev/tcp/127.0.0.1/5000' >/dev/null 2>&1 || exit 1"]
       interval: 30s
@@ -183,6 +189,9 @@ services:
       - /volume1/data/ebooks/lightnovels:/lightnovels:rw
       - /volume1/data/ebooks/calibre-library:/calibre-library:rw
       - /volume1/docker/audiobookshelf/audiobooks:/legacy-audiobooks:rw
+    depends_on:
+      ebook-control-center:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "nc -z 127.0.0.1 80 >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:80/ping >/dev/null 2>&1 || exit 1"]
       interval: 20s
@@ -226,6 +235,8 @@ services:
     volumes:
       - /volume1/docker/komf/config:/config:rw
     depends_on:
+      ebook-control-center:
+        condition: service_healthy
       komga:
         condition: service_healthy
       kavita:
@@ -269,6 +280,9 @@ services:
       - /volume1/data/ebooks/cwa-ingest:/cwa-book-ingest:rw
       - /volume1/data/ebooks/calibre-library:/calibre-library:rw
       - /volume1/data/ebooks/books:/books:rw
+    depends_on:
+      ebook-control-center:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8083 >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:8083 >/dev/null 2>&1 || bash -c '</dev/tcp/127.0.0.1/8083' >/dev/null 2>&1 || exit 1"]
       interval: 30s
@@ -279,10 +293,10 @@ services:
     logging: *default-logging
 
   # ---------------------------------------------------------------------------
-  # 🔍 6. CWA BOOK DOWNLOADER - 웹 도서 검색 & 원클릭 자동 다운로드 포털
+  # 🔍 6. CWA BOOK DOWNLOADER (Shelfmark) - 웹 도서 검색 & 원클릭 자동 다운로드 포털
   # ---------------------------------------------------------------------------
   cwa-book-downloader:
-    image: ghcr.io/calibre-web-automated-book-downloader/calibre-web-automated-book-downloader:latest
+    image: ghcr.io/calibrain/calibre-web-automated-book-downloader:latest
     container_name: ebook-book-downloader
     hostname: cwa-book-downloader
     networks:
@@ -293,13 +307,13 @@ services:
     labels:
       com.centurylinklabs.watchtower.enable: "true"
       com.centurylinklabs.watchtower.depends-on: "flaresolverr"
-    mem_limit: 1g
+    mem_limit: 2g
     security_opt:
       - no-new-privileges:true
     environment:
       TZ: ${TZ:-Asia/Seoul}
-      UID: ${PUID:-1026}
-      GID: ${PGID:-100}
+      PUID: ${PUID:-1026}
+      PGID: ${PGID:-100}
       FLASK_PORT: 8084
       INGEST_DIR: /cwa-book-ingest
       BOOK_LANGUAGE: ko,en,ja
@@ -308,13 +322,19 @@ services:
     ports:
       - "8084:8084"
     volumes:
+      - /volume1/docker/cwa-book-downloader/config:/config:rw
+      - /volume1/data/ebooks/cwa-ingest:/books:rw
       - /volume1/data/ebooks/cwa-ingest:/cwa-book-ingest:rw
+      - /volume1/data/ebooks/audiobooks:/audiobooks:rw
+    depends_on:
+      ebook-control-center:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8084 >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:8084 >/dev/null 2>&1 || bash -c '</dev/tcp/127.0.0.1/8084' >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8084/api/health >/dev/null 2>&1 || curl -fsS http://127.0.0.1:8084 >/dev/null 2>&1 || bash -c '</dev/tcp/127.0.0.1/8084' >/dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 45s
     restart: on-failure:5
     logging: *default-logging
 
@@ -339,6 +359,11 @@ services:
     user: "${PUID:-1026}:${PGID:-100}"
     environment:
       TZ: ${TZ:-Asia/Seoul}
+      BIND_IP: 0.0.0.0
+      BIND_PORT: 4567
+      DOWNLOAD_AS_CBZ: "true"
+      FLARESOLVERR_ENABLED: "true"
+      FLARESOLVERR_URL: http://flaresolverr:8191
       JAVA_TOOL_OPTIONS: "-Xmx1536m -Dsuwayomi.tachidesk.config.server.ip=0.0.0.0 -Dsuwayomi.tachidesk.config.server.port=4567 -Dsuwayomi.tachidesk.config.server.downloadsPath=/data/manga -Dsuwayomi.tachidesk.config.server.downloadAsCbz=true -Dsuwayomi.tachidesk.config.server.autoDownloadNewChapters=true -Dsuwayomi.tachidesk.config.server.flareSolverrEnabled=true -Dsuwayomi.tachidesk.config.server.flareSolverrUrl=http://flaresolverr:8191"
     ports:
       - "4567:4567"
@@ -346,6 +371,9 @@ services:
       - /volume1/docker/suwayomi:/home/suwayomi/.local/share/Tachidesk:rw
       - /volume1/data/ebooks/manga:/home/suwayomi/.local/share/Tachidesk/downloads:rw
       - /volume1/data/ebooks:/data:rw
+    depends_on:
+      ebook-control-center:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:4567 >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:4567 >/dev/null 2>&1 || bash -c '</dev/tcp/127.0.0.1/4567' >/dev/null 2>&1 || exit 1"]
       interval: 30s
@@ -359,7 +387,7 @@ services:
   # 📡 8. READARR - Prowlarr·qBittorrent 연동 신간 전자책·오디오북 자동 수집
   # ---------------------------------------------------------------------------
   readarr:
-    image: lscr.io/linuxserver/readarr:develop
+    image: lscr.io/linuxserver/readarr:nightly
     container_name: ebook-readarr
     hostname: readarr
     networks:
@@ -382,6 +410,9 @@ services:
       - /volume1/docker/readarr:/config:rw
       - /volume1/data/ebooks:/ebooks:rw
       - /volume1/data:/data:rw
+    depends_on:
+      ebook-control-center:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8787/ping >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:8787/ping >/dev/null 2>&1 || exit 1"]
       interval: 30s
@@ -421,6 +452,9 @@ services:
       - /volume1/docker/stirling-pdf/configs:/configs:rw
       - /volume1/docker/stirling-pdf/logs:/logs:rw
       - /volume1/docker/stirling-pdf/tessdata:/usr/share/tessdata:rw
+    depends_on:
+      ebook-control-center:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/api/v1/info/status >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:8080 >/dev/null 2>&1 || bash -c '</dev/tcp/127.0.0.1/8080' >/dev/null 2>&1 || exit 1"]
       interval: 30s
@@ -453,6 +487,9 @@ services:
       CAPTCHA_SOLVER: none
     ports:
       - "8191:8191"
+    depends_on:
+      ebook-control-center:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8191/health >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:8191/health >/dev/null 2>&1 || exit 1"]
       interval: 30s

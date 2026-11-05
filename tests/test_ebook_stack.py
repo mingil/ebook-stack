@@ -73,11 +73,20 @@ def test_generate_unified_compose_verifies_organic_integration():
         assert svc_def["labels"]["com.centurylinklabs.watchtower.enable"] == "true", svc_name
     assert services["komf"]["labels"]["com.centurylinklabs.watchtower.depends-on"] == "komga,kavita"
 
-    # 1. Organic Pipeline 1: CWA Downloader -> CWA -> Shared /calibre-library across Kavita, ABS, Komga
+    # 1. Organic Pipeline 1: CWA Downloader (Shelfmark) -> CWA -> Shared /calibre-library across Kavita, ABS, Komga
+    assert services["cwa-book-downloader"]["image"] == "ghcr.io/calibrain/calibre-web-automated-book-downloader:latest"
     assert "/volume1/data/ebooks/cwa-ingest:/cwa-book-ingest:rw" in services["cwa-book-downloader"]["volumes"]
+    assert "/volume1/data/ebooks/cwa-ingest:/books:rw" in services["cwa-book-downloader"]["volumes"]
+    assert "/volume1/docker/cwa-book-downloader/config:/config:rw" in services["cwa-book-downloader"]["volumes"]
     assert "/volume1/data/ebooks/cwa-ingest:/cwa-book-ingest:rw" in services["calibre-web-automated"]["volumes"]
     for viewer in ["calibre-web-automated", "kavita", "audiobookshelf", "komga"]:
         assert "/volume1/data/ebooks/calibre-library:/calibre-library:rw" in services[viewer]["volumes"]
+
+    # Verify Readarr uses verified :nightly image and all services wait for ebook-control-center pre-boot healing
+    assert services["readarr"]["image"] == "lscr.io/linuxserver/readarr:nightly"
+    for svc_name, svc_def in services.items():
+        if svc_name != "ebook-control-center":
+            assert svc_def["depends_on"]["ebook-control-center"]["condition"] == "service_healthy", svc_name
 
     # 2. Organic Pipeline 2: Suwayomi JVM flags -> CBZ to /data/manga + FlareSolverr URL
     suwayomi_java = services["suwayomi"]["environment"]["JAVA_TOOL_OPTIONS"]

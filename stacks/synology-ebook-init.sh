@@ -17,6 +17,7 @@ mkdir -p "/volume1/docker/audiobookshelf/metadata"
 mkdir -p "/volume1/docker/audiobookshelf/audiobooks"
 mkdir -p "/volume1/docker/komf/config"
 mkdir -p "/volume1/docker/calibre-web-automated/config"
+mkdir -p "/volume1/docker/cwa-book-downloader/config"
 mkdir -p "/volume1/docker/suwayomi"
 mkdir -p "/volume1/docker/readarr"
 mkdir -p "/volume1/docker/stirling-pdf/configs"
@@ -153,7 +154,7 @@ KOMF_EOF
 fi
 
 echo '[5/5] 시놀로지 표준 사용자 권한(PUID=1026, PGID=100) 일괄 적용 중...'
-chown -R 1026:100 "/volume1/docker/komga" "/volume1/docker/kavita" "/volume1/docker/audiobookshelf" "/volume1/docker/komf" "/volume1/docker/calibre-web-automated" "/volume1/docker/suwayomi" "/volume1/docker/readarr" "/volume1/docker/stirling-pdf" "/volume1/data/ebooks"
+chown -R 1026:100 "/volume1/docker/komga" "/volume1/docker/kavita" "/volume1/docker/audiobookshelf" "/volume1/docker/komf" "/volume1/docker/calibre-web-automated" "/volume1/docker/cwa-book-downloader" "/volume1/docker/suwayomi" "/volume1/docker/readarr" "/volume1/docker/stirling-pdf" "/volume1/data/ebooks"
 chmod -R 775 "/volume1/data/ebooks"
 
 echo '✅ eBook Stack 폴더 생성, DB 무손실 분리, 권한 적용이 100% 완료되었습니다!'

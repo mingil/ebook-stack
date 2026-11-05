@@ -136,6 +136,14 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             "",
         ])
 
+    ctrl_dep: List[str] = []
+    if "ebook-control-center" in selected:
+        ctrl_dep = [
+            "    depends_on:",
+            "      ebook-control-center:",
+            "        condition: service_healthy",
+        ]
+
     # 1. KOMGA
     if "komga" in selected:
         cname = _cname(cfg, "komga")
@@ -175,6 +183,7 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             f'      - "{cfg.komga_port}:25600"',
             "    volumes:",
             *komga_vols,
+            *ctrl_dep,
             "    healthcheck:",
             '      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:25600/actuator/health >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:25600/actuator/health >/dev/null 2>&1 || bash -c \'</dev/tcp/127.0.0.1/25600\' >/dev/null 2>&1 || exit 1"]',
             "      interval: 30s",
@@ -228,6 +237,7 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             f'      - "{cfg.kavita_port}:5000"',
             "    volumes:",
             *kavita_vols,
+            *ctrl_dep,
             "    healthcheck:",
             '      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:5000/api/health >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:5000/api/health >/dev/null 2>&1 || bash -c \'</dev/tcp/127.0.0.1/5000\' >/dev/null 2>&1 || exit 1"]',
             "      interval: 30s",
@@ -284,6 +294,7 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             f'      - "{cfg.audiobookshelf_port}:80"',
             "    volumes:",
             *abs_vols,
+            *ctrl_dep,
             "    healthcheck:",
             '      test: ["CMD-SHELL", "nc -z 127.0.0.1 80 >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:80/ping >/dev/null 2>&1 || exit 1"]',
             "      interval: 20s",
@@ -299,8 +310,13 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
     if "komf" in selected:
         cname = _cname(cfg, "komf")
         depends_lines: List[str] = []
-        if "komga" in selected or "kavita" in selected:
+        if "komga" in selected or "kavita" in selected or "ebook-control-center" in selected:
             depends_lines.append("    depends_on:")
+            if "ebook-control-center" in selected:
+                depends_lines.extend([
+                    "      ebook-control-center:",
+                    "        condition: service_healthy",
+                ])
             if "komga" in selected:
                 depends_lines.extend([
                     "      komga:",
@@ -392,6 +408,7 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             f"      - {data_root}/cwa-ingest:/cwa-book-ingest:rw",
             f"      - {data_root}/calibre-library:/calibre-library:rw",
             f"      - {data_root}/books:/books:rw",
+            *ctrl_dep,
             "    healthcheck:",
             '      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8083 >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:8083 >/dev/null 2>&1 || bash -c \'</dev/tcp/127.0.0.1/8083\' >/dev/null 2>&1 || exit 1"]',
             "      interval: 30s",
@@ -403,15 +420,15 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             "",
         ])
 
-    # 6. CWA BOOK DOWNLOADER
+    # 6. CWA BOOK DOWNLOADER (Shelfmark)
     if "cwa-book-downloader" in selected:
         cname = _cname(cfg, "book-downloader")
         lines.extend([
             "  # ---------------------------------------------------------------------------",
-            "  # 🔍 6. CWA BOOK DOWNLOADER - 웹 도서 검색 & 원클릭 자동 다운로드 포털",
+            "  # 🔍 6. CWA BOOK DOWNLOADER (Shelfmark) - 웹 도서 검색 & 원클릭 자동 다운로드 포털",
             "  # ---------------------------------------------------------------------------",
             "  cwa-book-downloader:",
-            "    image: ghcr.io/calibre-web-automated-book-downloader/calibre-web-automated-book-downloader:latest",
+            "    image: ghcr.io/calibrain/calibre-web-automated-book-downloader:latest",
             f"    container_name: {cname}",
             "    hostname: cwa-book-downloader",
             "    networks:",
@@ -422,13 +439,13 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             "    labels:",
             '      com.centurylinklabs.watchtower.enable: "true"',
             '      com.centurylinklabs.watchtower.depends-on: "flaresolverr"',
-            "    mem_limit: 1g",
+            "    mem_limit: 2g",
             "    security_opt:",
             "      - no-new-privileges:true",
             "    environment:",
             f"      TZ: ${{TZ:-{cfg.tz}}}",
-            f"      UID: ${{PUID:-{cfg.puid}}}",
-            f"      GID: ${{PGID:-{cfg.pgid}}}",
+            f"      PUID: ${{PUID:-{cfg.puid}}}",
+            f"      PGID: ${{PGID:-{cfg.pgid}}}",
             "      FLASK_PORT: 8084",
             "      INGEST_DIR: /cwa-book-ingest",
             "      BOOK_LANGUAGE: ko,en,ja",
@@ -437,13 +454,17 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             "    ports:",
             f'      - "{cfg.cwa_dl_port}:8084"',
             "    volumes:",
+            f"      - {docker_root}/cwa-book-downloader/config:/config:rw",
+            f"      - {data_root}/cwa-ingest:/books:rw",
             f"      - {data_root}/cwa-ingest:/cwa-book-ingest:rw",
+            f"      - {data_root}/audiobooks:/audiobooks:rw",
+            *ctrl_dep,
             "    healthcheck:",
-            '      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8084 >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:8084 >/dev/null 2>&1 || bash -c \'</dev/tcp/127.0.0.1/8084\' >/dev/null 2>&1 || exit 1"]',
+            '      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8084/api/health >/dev/null 2>&1 || curl -fsS http://127.0.0.1:8084 >/dev/null 2>&1 || bash -c \'</dev/tcp/127.0.0.1/8084\' >/dev/null 2>&1 || exit 1"]',
             "      interval: 30s",
             "      timeout: 10s",
             "      retries: 3",
-            "      start_period: 30s",
+            "      start_period: 45s",
             "    restart: on-failure:5",
             "    logging: *default-logging",
             "",
@@ -474,6 +495,11 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             f'    user: "${{PUID:-{cfg.puid}}}:${{PGID:-{cfg.pgid}}}"',
             "    environment:",
             f"      TZ: ${{TZ:-{cfg.tz}}}",
+            "      BIND_IP: 0.0.0.0",
+            "      BIND_PORT: 4567",
+            "      DOWNLOAD_AS_CBZ: \"true\"",
+            "      FLARESOLVERR_ENABLED: \"true\"",
+            "      FLARESOLVERR_URL: http://flaresolverr:8191",
             '      JAVA_TOOL_OPTIONS: "-Xmx1536m -Dsuwayomi.tachidesk.config.server.ip=0.0.0.0 -Dsuwayomi.tachidesk.config.server.port=4567 -Dsuwayomi.tachidesk.config.server.downloadsPath=/data/manga -Dsuwayomi.tachidesk.config.server.downloadAsCbz=true -Dsuwayomi.tachidesk.config.server.autoDownloadNewChapters=true -Dsuwayomi.tachidesk.config.server.flareSolverrEnabled=true -Dsuwayomi.tachidesk.config.server.flareSolverrUrl=http://flaresolverr:8191"',
             "    ports:",
             f'      - "{cfg.suwayomi_port}:4567"',
@@ -481,6 +507,7 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             f"      - {docker_root}/suwayomi:/home/suwayomi/.local/share/Tachidesk:rw",
             f"      - {data_root}/manga:/home/suwayomi/.local/share/Tachidesk/downloads:rw",
             f"      - {data_root}:/data:rw",
+            *ctrl_dep,
             "    healthcheck:",
             '      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:4567 >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:4567 >/dev/null 2>&1 || bash -c \'</dev/tcp/127.0.0.1/4567\' >/dev/null 2>&1 || exit 1"]',
             "      interval: 30s",
@@ -500,7 +527,7 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             "  # 📡 8. READARR - Prowlarr·qBittorrent 연동 신간 전자책·오디오북 자동 수집",
             "  # ---------------------------------------------------------------------------",
             "  readarr:",
-            "    image: lscr.io/linuxserver/readarr:develop",
+            "    image: lscr.io/linuxserver/readarr:nightly",
             f"    container_name: {cname}",
             "    hostname: readarr",
             "    networks:",
@@ -523,6 +550,7 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             f"      - {docker_root}/readarr:/config:rw",
             f"      - {data_root}:/ebooks:rw",
             "      - /volume1/data:/data:rw",
+            *ctrl_dep,
             "    healthcheck:",
             '      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8787/ping >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:8787/ping >/dev/null 2>&1 || exit 1"]',
             "      interval: 30s",
@@ -568,6 +596,7 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             f"      - {docker_root}/stirling-pdf/configs:/configs:rw",
             f"      - {docker_root}/stirling-pdf/logs:/logs:rw",
             f"      - {docker_root}/stirling-pdf/tessdata:/usr/share/tessdata:rw",
+            *ctrl_dep,
             "    healthcheck:",
             '      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/api/v1/info/status >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:8080 >/dev/null 2>&1 || bash -c \'</dev/tcp/127.0.0.1/8080\' >/dev/null 2>&1 || exit 1"]',
             "      interval: 30s",
@@ -606,6 +635,7 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             "      CAPTCHA_SOLVER: none",
             "    ports:",
             f'      - "{cfg.flaresolverr_port}:8191"',
+            *ctrl_dep,
             "    healthcheck:",
             '      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8191/health >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:8191/health >/dev/null 2>&1 || exit 1"]',
             "      interval: 30s",
@@ -753,6 +783,7 @@ mkdir -p "{docker_root}/audiobookshelf/metadata"
 mkdir -p "{docker_root}/audiobookshelf/audiobooks"
 mkdir -p "{docker_root}/komf/config"
 mkdir -p "{docker_root}/calibre-web-automated/config"
+mkdir -p "{docker_root}/cwa-book-downloader/config"
 mkdir -p "{docker_root}/suwayomi"
 mkdir -p "{docker_root}/readarr"
 mkdir -p "{docker_root}/stirling-pdf/configs"
@@ -786,7 +817,7 @@ if [ ! -f "{docker_root}/komf/config/application.yml" ]; then
 fi
 
 echo '[5/5] 시놀로지 표준 사용자 권한(PUID={cfg.puid}, PGID={cfg.pgid}) 일괄 적용 중...'
-chown -R {cfg.puid}:{cfg.pgid} "{docker_root}/komga" "{docker_root}/kavita" "{docker_root}/audiobookshelf" "{docker_root}/komf" "{docker_root}/calibre-web-automated" "{docker_root}/suwayomi" "{docker_root}/readarr" "{docker_root}/stirling-pdf" "{data_root}"
+chown -R {cfg.puid}:{cfg.pgid} "{docker_root}/komga" "{docker_root}/kavita" "{docker_root}/audiobookshelf" "{docker_root}/komf" "{docker_root}/calibre-web-automated" "{docker_root}/cwa-book-downloader" "{docker_root}/suwayomi" "{docker_root}/readarr" "{docker_root}/stirling-pdf" "{data_root}"
 chmod -R 775 "{data_root}"
 
 echo '✅ eBook Stack 폴더 생성, DB 무손실 분리, 권한 적용이 100% 완료되었습니다!'
@@ -850,9 +881,9 @@ else
     "advplyr/audiobookshelf:latest" \\
     "sndxr/komf:latest" \\
     "crocodilestick/calibre-web-automated:latest" \\
-    "ghcr.io/calibre-web-automated-book-downloader/calibre-web-automated-book-downloader:latest" \\
+    "ghcr.io/calibrain/calibre-web-automated-book-downloader:latest" \\
     "ghcr.io/suwayomi/tachidesk:latest" \\
-    "lscr.io/linuxserver/readarr:develop" \\
+    "lscr.io/linuxserver/readarr:nightly" \\
     "frooodle/s-pdf:latest" \\
     "ghcr.io/flaresolverr/flaresolverr:latest"; do
     docker pull "$img" 2>/dev/null || true
