@@ -36,6 +36,8 @@ services:
         aliases:
           - ebook-control-center
           - ebook-stack
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
     security_opt:
       - no-new-privileges:true
     environment:
@@ -44,6 +46,7 @@ services:
       PGID: ${PGID:-100}
       PORT: 8500
       AUTO_BOOTSTRAP: "true"
+      AUTO_DAILY_MAINTENANCE: "true"
       HOST_DOCKER_MOUNT: /host-docker
       HOST_DATA_MOUNT: /host-data
       KOMGA_USER: ${KOMGA_USER:-fauna035@gmail.com}
@@ -75,6 +78,8 @@ services:
         aliases:
           - komga
           - ebook-komga
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
     mem_limit: 4g
     cpu_shares: 768
     security_opt:
@@ -112,6 +117,8 @@ services:
         aliases:
           - kavita
           - ebook-kavita
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
     mem_limit: 4g
     cpu_shares: 768
     security_opt:
@@ -152,6 +159,8 @@ services:
         aliases:
           - audiobookshelf
           - ebook-audiobookshelf
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
     mem_limit: 4g
     cpu_shares: 768
     security_opt:
@@ -195,6 +204,9 @@ services:
         aliases:
           - komf
           - ebook-komf
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+      com.centurylinklabs.watchtower.depends-on: "komga,kavita"
     mem_limit: 1g
     cpu_shares: 768
     security_opt:
@@ -239,6 +251,8 @@ services:
         aliases:
           - calibre-web-automated
           - ebook-calibre-web
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
     mem_limit: 2g
     cpu_shares: 768
     security_opt:
@@ -276,6 +290,9 @@ services:
         aliases:
           - cwa-book-downloader
           - ebook-book-downloader
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+      com.centurylinklabs.watchtower.depends-on: "flaresolverr"
     mem_limit: 1g
     security_opt:
       - no-new-privileges:true
@@ -313,6 +330,9 @@ services:
         aliases:
           - suwayomi
           - ebook-suwayomi
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+      com.centurylinklabs.watchtower.depends-on: "flaresolverr"
     mem_limit: 2g
     security_opt:
       - no-new-privileges:true
@@ -347,6 +367,8 @@ services:
         aliases:
           - readarr
           - ebook-readarr
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
     mem_limit: 1g
     security_opt:
       - no-new-privileges:true
@@ -381,6 +403,8 @@ services:
         aliases:
           - stirling-pdf
           - ebook-stirling-pdf
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
     mem_limit: 2g
     security_opt:
       - no-new-privileges:true
@@ -418,6 +442,8 @@ services:
         aliases:
           - flaresolverr
           - ebook-flaresolverr
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
     mem_limit: 1g
     security_opt:
       - no-new-privileges:true

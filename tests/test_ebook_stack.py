@@ -56,20 +56,22 @@ def test_generate_unified_compose_verifies_organic_integration():
     data = res.json()
     compose_text = data["docker_compose"]
 
-    # Ensure zero "marius" and zero "watchtower"
+    # Ensure zero "marius" and no watchtower service in compose
     assert "marius" not in compose_text.lower()
-    assert "watchtower" not in compose_text.lower()
 
     parsed = yaml.safe_load(compose_text)
     assert "ebook_net" in parsed["networks"]
     services = parsed["services"]
     assert "watchtower" not in services
 
-    # 0. Verify integrated project image (ebook-control-center)
+    # 0. Verify integrated project image (ebook-control-center) & existing Watchtower labels
     ctrl = services["ebook-control-center"]
     assert ctrl["image"] == "kimmingil/ebook-stack:latest"
     assert "/volume1/docker:/host-docker:rw" in ctrl["volumes"]
     assert "/volume1/data/ebooks:/host-data:rw" in ctrl["volumes"]
+    for svc_name, svc_def in services.items():
+        assert svc_def["labels"]["com.centurylinklabs.watchtower.enable"] == "true", svc_name
+    assert services["komf"]["labels"]["com.centurylinklabs.watchtower.depends-on"] == "komga,kavita"
 
     # 1. Organic Pipeline 1: CWA Downloader -> CWA -> Shared /calibre-library across Kavita, ABS, Komga
     assert "/volume1/data/ebooks/cwa-ingest:/cwa-book-ingest:rw" in services["cwa-book-downloader"]["volumes"]

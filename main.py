@@ -1,9 +1,10 @@
 """FastAPI Backend for the Unified eBook, Manga, Webtoon & Audiobook Stack Control Center (ebook-stack)."""
 
+import asyncio
 import io
 import os
 import zipfile
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -45,11 +46,28 @@ STACKS_DIR = BASE_DIR / "stacks"
 LEGACY_DIR = BASE_DIR / "legacy-backup"
 
 
+async def _daily_maintenance_loop() -> None:
+    """Automatically back up SQLite DBs & run VACUUM every 24h so Watchtower updates are 100% safe."""
+    while True:
+        await asyncio.sleep(86400)
+        with suppress(Exception):
+            run_sqlite_maintenance_and_backup()
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     if os.environ.get("AUTO_BOOTSTRAP", "true").lower() == "true":
         bootstrap_host_environment()
-    yield
+    maint_task = None
+    if os.environ.get("AUTO_DAILY_MAINTENANCE", "true").lower() == "true":
+        maint_task = asyncio.create_task(_daily_maintenance_loop())
+    try:
+        yield
+    finally:
+        if maint_task:
+            maint_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await maint_task
 
 
 app = FastAPI(
