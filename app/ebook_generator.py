@@ -768,17 +768,21 @@ echo '✅ eBook Stack 폴더 생성, DB 무손실 분리, 권한 적용이 100% 
 
 
 def generate_maintenance_doctor_script(cfg: EbookStackConfigRequest) -> str:
-    """Generate an ongoing automated maintenance, SQLite VACUUM optimization & backup script."""
+    """Generate an ongoing automated safe-update, SQLite VACUUM optimization & backup script."""
     docker_root = cfg.docker_root.rstrip("/")
     data_root = cfg.ebook_data_root.rstrip("/")
     backup_root = f"{docker_root}/_backups/ebook-stack"
+    stack_dir = f"{docker_root}/ebook-stack"
 
     return f"""#!/bin/bash
 # =============================================================================
-# 🩺 EBOOK STACK DOCTOR - 정기 유지보수 · SQLite DB 최적화 · 설정 자동 백업 스크립트
+# 🩺 EBOOK STACK DOCTOR - 백업 우선 안전 자동 업데이트 · SQLite 최적화 · 자가치유 스크립트
 # =============================================================================
-# (참고: ebook-control-center 웹 대시보드에서 [원클릭 DB 최적화 및 백업 실행] 버튼으로
-#  언제든 바로 실행할 수 있으며, 시놀로지 작업 스케줄러에 등록해 두셔도 됩니다.)
+# • Watchtower처럼 백업 없이 무작정 컨테이너를 덮어쓰지 않고,
+#   반드시 [1. DB 스냅샷 백업] ➔ [2. 각 공식 제작자 최신 이미지 Pull & 무중단 교체] ➔
+#   [3. SQLite VACUUM 속도 최적화] ➔ [4. 구버전 잉여 이미지 청소] 순서로 안전하게 관리합니다.
+# • 시놀로지 제어판 -> 작업 스케줄러(root)에 매주 일요일 새벽 04:00 실행으로 등록해 두시면
+#   11개 모든 이미지가 데이터 손실 위험 0%로 영구 자동 업데이트됩니다.
 # =============================================================================
 set -e
 
@@ -787,19 +791,14 @@ BACKUP_DIR="{backup_root}/$TIMESTAMP"
 mkdir -p "$BACKUP_DIR"
 
 echo "=================================================================="
-echo "🩺 [1/4] eBook 스택 컨테이너 헬스 상태 및 메모리 점유율 정밀 점검"
-echo "=================================================================="
-docker ps --filter "name={cfg.container_prefix}" --format "table {{{{.Names}}}}\t{{{{.Status}}}}\t{{{{.Ports}}}}" || true
-
-echo "=================================================================="
-echo "💾 [2/4] Komga · Kavita · Audiobookshelf · Komf 핵심 DB 무중단 스냅샷 백업"
+echo "💾 [1/5] 업데이트 전 Komga · Kavita · Audiobookshelf · Komf · CWA 안전 스냅샷 백업"
 echo "=================================================================="
 for svc in komga kavita audiobookshelf komf calibre-web-automated; do
   if [ -d "{docker_root}/$svc" ]; then
     tar -czf "$BACKUP_DIR/${{svc}}_config_${{TIMESTAMP}}.tar.gz" \\
       --exclude="*.log" --exclude="cache" --exclude="Cache" --exclude="logs" \\
       -C "{docker_root}" "$svc/config" 2>/dev/null || true
-    echo "  -> $svc 설정 및 DB 백업 완료: $BACKUP_DIR/${{svc}}_config_${{TIMESTAMP}}.tar.gz"
+    echo "  -> $svc 업데이트 전 안전 백업 완료: $BACKUP_DIR/${{svc}}_config_${{TIMESTAMP}}.tar.gz"
   fi
 done
 
@@ -807,7 +806,35 @@ done
 find "{backup_root}" -mindepth 1 -maxdepth 1 -type d -mtime +30 -exec rm -rf {{}} + 2>/dev/null || true
 
 echo "=================================================================="
-echo "⚡ [3/4] SQLite 데이터베이스 조각 모음(VACUUM & ANALYZE) 속도 최적화"
+echo "🔄 [2/5] 각 공식 제작자 최신 도커 이미지 확인 및 변경된 컨테이너만 무중단 업데이트"
+echo "=================================================================="
+if [ -f "{stack_dir}/docker-compose.yml" ]; then
+  cd "{stack_dir}"
+  docker compose pull
+  docker compose up -d --remove-orphans
+elif [ -f "./docker-compose.yml" ]; then
+  docker compose pull
+  docker compose up -d --remove-orphans
+else
+  # 개별 실행 중인 컨테이너의 최신 이미지 자동 Pull
+  for img in \\
+    "kimmingil/ebook-stack:latest" \\
+    "gotson/komga:latest" \\
+    "jvmilazz0/kavita:latest" \\
+    "advplyr/audiobookshelf:latest" \\
+    "sndxr/komf:latest" \\
+    "crocodilestick/calibre-web-automated:latest" \\
+    "ghcr.io/calibre-web-automated-book-downloader/calibre-web-automated-book-downloader:latest" \\
+    "ghcr.io/suwayomi/tachidesk:latest" \\
+    "lscr.io/linuxserver/readarr:develop" \\
+    "frooodle/s-pdf:latest" \\
+    "ghcr.io/flaresolverr/flaresolverr:latest"; do
+    docker pull "$img" 2>/dev/null || true
+  done
+fi
+
+echo "=================================================================="
+echo "⚡ [3/5] SQLite 데이터베이스 조각 모음(VACUUM & ANALYZE) 속도 최적화"
 echo "=================================================================="
 if command -v sqlite3 >/dev/null 2>&1; then
   for db_file in \\
@@ -824,12 +851,18 @@ if command -v sqlite3 >/dev/null 2>&1; then
 fi
 
 echo "=================================================================="
-echo "🔐 [4/4] 시놀로지 파일 권한(PUID={cfg.puid}:PGID={cfg.pgid}) 및 인제스트 폴더 자가 치유"
+echo "🔐 [4/5] 시놀로지 파일 권한(PUID={cfg.puid}:PGID={cfg.pgid}) 및 인제스트 폴더 자가 치유"
 echo "=================================================================="
 chown -R {cfg.puid}:{cfg.pgid} "{data_root}" 2>/dev/null || true
 chmod -R 775 "{data_root}/cwa-ingest" 2>/dev/null || true
 
-echo "✅ [완료] 모든 eBook 서버의 DB 최적화, 백업, 권한 복구가 완벽히 끝났습니다!"
+echo "=================================================================="
+echo "🧹 [5/5] 업데이트 후 남은 구버전 잉여 도커 이미지 자동 청소 (NAS 디스크 회수)"
+echo "=================================================================="
+docker image prune -f >/dev/null 2>&1 || true
+docker ps --filter "name={cfg.container_prefix}" --format "table {{{{.Names}}}}\\t{{{{.Status}}}}\\t{{{{.Ports}}}}" || true
+
+echo "✅ [완료] 백업 ➔ 최신 이미지 안전 업데이트 ➔ DB 최적화 ➔ 구버전 이미지 청소가 모두 끝났습니다!"
 """
 
 

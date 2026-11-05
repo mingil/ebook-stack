@@ -146,3 +146,11 @@ def test_download_zip_bundle():
     assert "docker-compose.yml" in names
     assert "compose.yaml" in names
     assert "komf/application.yml" in names
+
+
+def test_safe_update_prepare_endpoint():
+    res = client.post("/api/updates/safe-prepare")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "ready_for_safe_update"
+    assert "docker compose pull" in data["command"]

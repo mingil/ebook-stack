@@ -34,6 +34,10 @@ from app.runtime_manager import (
     bootstrap_host_environment,
     run_sqlite_maintenance_and_backup,
 )
+from app.update_manager import (
+    check_upstream_images_status,
+    prepare_safe_update_plan,
+)
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -201,6 +205,18 @@ async def trigger_runtime_bootstrap() -> Dict[str, Any]:
 async def trigger_runtime_maintenance() -> Dict[str, Any]:
     """Trigger immediate SQLite VACUUM optimization and config tar.gz backup."""
     return run_sqlite_maintenance_and_backup()
+
+
+@app.get("/api/updates/status")
+async def get_upstream_updates_status() -> Dict[str, Any]:
+    """Check upstream Docker Hub & GHCR image maintainers and latest release timestamps."""
+    return await check_upstream_images_status()
+
+
+@app.post("/api/updates/safe-prepare")
+async def trigger_safe_update_prepare() -> Dict[str, Any]:
+    """Execute pre-update SQLite DB snapshot backup and prepare safe update execution."""
+    return prepare_safe_update_plan()
 
 
 @app.post("/api/download-bundle")
