@@ -1,0 +1,125 @@
+version: '3.8'
+
+# 🌐 1. 도커 내부 통신용 커스텀 네트워크 생성
+networks:
+  ebook_net:
+    name: ebook_net
+    driver: bridge
+
+# 🧹 2. 공통 로그 제한 설정 (NAS 용량 보호)
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # 📚 1. 만화 메인 서버 (Komga)
+  komga:
+    container_name: Komga
+    image: gotson/komga:latest
+    networks:
+      - ebook_net
+    mem_limit: 4g
+    cpu_shares: 768
+    security_opt:
+      - no-new-privileges:true
+    user: "${PUID}:${PGID}"
+    environment:
+      - TZ=${TZ}
+      # 🌟 [Komga 최적화] 넉넉한 RAM을 활용하되 OOM(메모리 부족 다운)을 막기 위해 최대 3GB 할당 및 G1GC 가비지 컬렉터 적용
+      - JAVA_TOOL_OPTIONS=-Xmx3g -XX:+UseG1GC
+    ports:
+      - 8341:25600
+    volumes:
+      - /volume1/docker/komga/config:/config:rw
+      - /volume1/docker/komga/data:/data:rw
+      # (사용하지 않는 comics, books 볼륨 제거 완료)
+    restart: on-failure:5
+    logging: *default-logging
+
+  # 🤖 2. 메타데이터 수집 서버 (Komf)
+  komf:
+    container_name: Komf
+    image: sndxr/komf:latest
+    networks:
+      - ebook_net
+    mem_limit: 1g
+    cpu_shares: 768
+    security_opt:
+      - no-new-privileges:true
+    user: "${PUID}:${PGID}"
+    environment:
+      - TZ=${TZ}
+      # 커스텀 네트워크 덕분에 도커 이름(komga, kavita)으로 100% 안정적인 내부망 통신 가능
+      - KOMF_KOMGA_BASE_URI=http://komga:25600
+      - KOMF_KOMGA_USER=${KOMGA_USER}
+      - KOMF_KOMGA_PASSWORD=${KOMGA_PASSWORD}
+      - KOMF_KAVITA_BASE_URI=http://kavita:5000
+      - KOMF_KAVITA_API_KEY=${KAVITA_API_KEY}
+      - KOMF_LOG_LEVEL=INFO
+      # 🌟 [Komf 최적화] 기존의 훌륭한 찌꺼기 청소 옵션 유지 + 1g 제한을 넘지 않도록 최대 메모리(-Xmx512m) 명시
+      - JAVA_TOOL_OPTIONS=-Xmx512m -XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=compact -XX:ShenandoahGuaranteedGCInterval=3600000 -XX:TrimNativeHeapInterval=3600000
+    ports:
+      - 8085:8085
+    volumes:
+      - /volume1/docker/komf/config:/config:rw
+    restart: on-failure:5
+    depends_on:
+      - komga
+      - kavita
+    logging: *default-logging
+
+  # =========================================================
+  # 🔽 아래 Kavita와 Audiobookshelf는 다음 단계에서 세부 최적화를 
+  # 진행할 예정이며, 현재는 네트워크와 환경 변수 뼈대만 연동해 두었습니다.
+  # =========================================================
+
+  # 🌟 3. 하이브리드 서버 (Kavita)
+  kavita:
+    container_name: Kavita
+    image: jvmilazz0/kavita:latest
+    hostname: kavita
+    networks:
+      - ebook_net
+    mem_limit: 4g
+    cpu_shares: 768
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - TZ=${TZ}
+    ports:
+      - 5471:5000
+    volumes:
+      - /volume1/docker/kavita/config:/kavita/config:rw
+      - /volume1/docker/kavita/data:/manga:rw
+    restart: on-failure:5
+    logging: *default-logging
+
+  # 📖 4. 소설/오디오북 서버 (Audiobookshelf)
+  audiobookshelf:
+    container_name: Audiobookshelf
+    image: advplyr/audiobookshelf:latest
+    networks:
+      - ebook_net
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 80 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+    mem_limit: 4g
+    cpu_shares: 768
+    environment:
+      - TZ=${TZ}
+      - JWT_SECRET_KEY=${ABS_JWT_SECRET}
+    ports:
+      - 13378:80
+    volumes:
+      - /volume1/docker/audiobookshelf:/config:rw
+      - /volume1/docker/audiobookshelf/audiobooks:/audiobooks:rw
+      - /volume1/docker/audiobookshelf/metadata:/metadata:rw
+    restart: on-failure:5
+    logging: *default-logging

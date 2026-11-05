@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="ko" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ultimate eBook &amp; Manga Stack Control Center (ebook-stack)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <style>
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+    body {
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      background: #090d16;
+      color: #e2e8f0;
+    }
+    .glass-card {
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(99, 102, 241, 0.22);
+    }
+    .code-box {
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      background: #050811;
+      border: 1px solid #1e293b;
+    }
+    .tab-active {
+      background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+      color: #ffffff;
+      border-color: transparent;
+      box-shadow: 0 4px 15px rgba(79, 70, 229, 0.35);
+    }
+    .svc-card-active {
+      border-color: #6366f1 !important;
+      background: rgba(49, 46, 129, 0.24) !important;
+    }
+  </style>
+</head>
+<body class="min-h-screen pb-16">
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-gradient-to-r from-slate-950 via-indigo-950/40 to-slate-950">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+        <div>
+          <div class="flex flex-wrap items-center gap-2 mb-3">
+            <span class="px-3 py-1 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+              <i class="fa-solid fa-cubes mr-1"></i>SINGLE-PROJECT UNIFIED STACK (ebook-stack)
+            </span>
+            <span class="px-3 py-1 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+              <i class="fa-solid fa-stethoscope mr-1"></i>기존 ebook-library 6대 결함 진단·완치
+            </span>
+            <span class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+              <i class="fa-solid fa-diagram-project mr-1"></i>100% 유기적 파이프라인 &amp; 자동 관제 내장
+            </span>
+          </div>
+          <h1 class="text-2xl sm:text-4xl font-extrabold tracking-tight text-white">
+            현존 최고 완벽 사양 <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-300 to-cyan-300">eBook · 만화 · 웹툰 · 오디오북</span> 통합 관제 센터
+          </h1>
+          <p class="mt-2 text-slate-300 text-sm sm:text-base max-w-3xl">
+            단 하나의 프로젝트(<strong><code>ebook-stack</code></strong>)와 단일 <code>docker-compose.yml</code> 안에서
+            관제 컨테이너(<code>kimmingil/ebook-stack:latest</code>)와 10대 eBook 서버(<strong>Komga · Kavita · Audiobookshelf · Komf · Calibre-Web-Automated · Suwayomi</strong> 등)가 유기적으로 연동되어 동작합니다.
+          </p>
+        </div>
+        <div class="flex flex-wrap gap-3">
+          <button onclick="downloadZipBundle()" class="px-5 py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-900/40 flex items-center gap-2 transition">
+            <i class="fa-solid fa-file-zipper text-base"></i>
+            <span>전체 설정·유지보수 패키지 (.ZIP) 다운로드</span>
+          </button>
+          <button onclick="copyActiveTab()" class="px-5 py-3 rounded-xl font-bold text-sm bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-900/40 flex items-center gap-2 transition">
+            <i class="fa-regular fa-copy text-base"></i>
+            <span id="copyBtnLabel">현재 코드 원클릭 복사</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 mt-8 space-y-8">
+    <!-- 0. Organic Inter-Container Pipeline Architecture -->
+    <section class="glass-card rounded-2xl p-6 border-l-4 border-l-emerald-500">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+        <div>
+          <h2 class="text-lg sm:text-xl font-extrabold text-white flex items-center gap-2.5">
+            <i class="fa-solid fa-arrows-spin text-emerald-400"></i>
+            <span>컨테이너 간 100% 유기적 자동화 파이프라인 (단일 프로젝트 통합 동작 구조)</span>
+          </h2>
+          <p class="text-xs sm:text-sm text-slate-300 mt-1">
+            단순히 컨테이너를 모아놓은 것이 아니라, 다운로드·변환·메타데이터·열람·유지보수가 하나의 생명체처럼 맞물려 돌아가도록 설계·검증되었습니다.
+          </p>
+        </div>
+        <div class="flex flex-wrap gap-2 shrink-0">
+          <button onclick="runRuntimeBootstrap()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition">
+            <i class="fa-solid fa-folder-plus mr-1"></i>폴더·DB분리 즉시 실행
+          </button>
+          <button onclick="runRuntimeMaintenance()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition">
+            <i class="fa-solid fa-database mr-1"></i>SQLite VACUUM 최적화 &amp; 백업 실행
+          </button>
+        </div>
+      </div>
+      <div id="runtimeActionBanner" class="hidden mb-4 p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-xs text-emerald-200"></div>
+      <div id="organicPipelinesGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+    </section>
+
+    <!-- 1. Root-Cause Diagnosis Report Section -->
+    <section class="glass-card rounded-2xl p-6 border-l-4 border-l-indigo-500">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
+        <div>
+          <h2 class="text-lg sm:text-xl font-extrabold text-white flex items-center gap-2.5">
+            <i class="fa-solid fa-magnifying-glass-chart text-rose-400"></i>
+            <span>업로드하신 기존 <code>ebook-library</code> 정밀 원인 진단 및 해결 완료 보고서</span>
+          </h2>
+          <p class="text-xs sm:text-sm text-slate-300 mt-1">
+            기존 <code>compose.yaml</code>과 <code>.env</code>를 전수 분석하여 잠재적 장애 요인 6가지를 진단하고 아래 통합 스택에 100% 반영했습니다.
+          </p>
+        </div>
+        <button onclick="toggleDiagnosisCards()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 shrink-0">
+          <i class="fa-solid fa-arrows-up-down mr-1"></i>진단 상세 접기/펼치기
+        </button>
+      </div>
+
+      <div id="diagnosisContainer" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+    </section>
+
+    <!-- 2. Presets + Customizer + Services Selector -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <!-- Left Column: Presets & Environment Form -->
+      <div class="lg:col-span-5 space-y-6">
+        <div class="glass-card rounded-2xl p-5">
+          <h2 class="text-base font-bold text-white flex items-center gap-2 mb-3">
+            <i class="fa-solid fa-wand-magic-sparkles text-indigo-400"></i>
+            <span>1. 원클릭 추천 프리셋 선택</span>
+          </h2>
+          <div id="presetList" class="space-y-2.5"></div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-5 space-y-4">
+          <h2 class="text-base font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-sliders text-emerald-400"></i>
+            <span>2. 시놀로지 NAS 경로 · 포트 · 네이밍 설정</span>
+          </h2>
+          <p class="text-xs text-slate-400">
+            기존에 사용하시던 포트(<code>8341</code>, <code>5471</code>, <code>13378</code>, <code>8085</code>)와 계정/API 키 구조가 기본값으로 보존되어 있습니다.
+          </p>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">시놀로지 NAS IP</label>
+              <input id="cfgNasIp" type="text" value="192.168.1.100" onchange="triggerGenerate()" class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white focus:border-indigo-500 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">컨테이너 이름 프리픽스</label>
+              <select id="cfgPrefix" onchange="triggerGenerate()" class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white focus:border-indigo-500 focus:outline-none">
+                <option value="ebook-" selected>ebook-* (추천: ebook-komga 등 그룹 정렬)</option>
+                <option value="">프리픽스 없음 (komga, kavita 등 순수 이름)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">도커 설정 루트 (Config)</label>
+              <input id="cfgDockerRoot" type="text" value="/volume1/docker" onchange="triggerGenerate()" class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white focus:border-indigo-500 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">통합 서재 루트 (Master Data)</label>
+              <input id="cfgDataRoot" type="text" value="/volume1/data/ebooks" onchange="triggerGenerate()" class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white focus:border-indigo-500 focus:outline-none" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-4 gap-2 pt-1">
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-400 mb-1">Komga 포트</label>
+              <input id="cfgKomgaPort" type="number" value="8341" onchange="triggerGenerate()" class="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-400 mb-1">Kavita 포트</label>
+              <input id="cfgKavitaPort" type="number" value="5471" onchange="triggerGenerate()" class="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-400 mb-1">ABS 포트</label>
+              <input id="cfgAbsPort" type="number" value="13378" onchange="triggerGenerate()" class="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-400 mb-1">Komf 포트</label>
+              <input id="cfgKomfPort" type="number" value="8085" onchange="triggerGenerate()" class="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white" />
+            </div>
+          </div>
+
+          <div class="pt-2 border-t border-slate-800">
+            <label class="flex items-center justify-between cursor-pointer">
+              <div>
+                <span class="text-sm font-semibold text-emerald-300">기존 서재 경로 무손실 호환 마운트 유지</span>
+                <p class="text-xs text-slate-400">기존 <code>/volume1/docker/{komga,kavita,audiobookshelf}</code> 내부 데이터 폴더도 함께 연결해 기존 책 유실을 방지합니다.</p>
+              </div>
+              <input id="cfgKeepLegacy" type="checkbox" checked onchange="triggerGenerate()" class="w-5 h-5 accent-emerald-500 rounded cursor-pointer" />
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: eBook Ecosystem Services -->
+      <div class="lg:col-span-7 glass-card rounded-2xl p-5 flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-base font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-layer-group text-purple-400"></i>
+              <span>3. 포함할 eBook · 만화 · 오디오북 생태계 컨테이너 (<span id="selectedCount">11</span>개 선택됨)</span>
+            </h2>
+            <span class="text-xs text-indigo-300 bg-indigo-950/60 border border-indigo-700/40 px-2.5 py-1 rounded-full">
+              클릭하여 개별 모듈 ON/OFF
+            </span>
+          </div>
+          <div id="serviceGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[540px] overflow-y-auto pr-1"></div>
+        </div>
+
+        <div class="mt-4 p-3.5 rounded-xl bg-indigo-950/30 border border-indigo-500/30 flex items-start gap-3">
+          <i class="fa-solid fa-folder-tree text-indigo-400 text-lg mt-0.5"></i>
+          <div class="text-xs text-slate-300 leading-relaxed">
+            <strong class="text-white">단일 마스터 볼륨 &amp; 서재 공유 아키텍처 (<code>/volume1/data/ebooks</code>):</strong>
+            Suwayomi가 다운로드한 만화(<code>/data/manga</code>)와 CWA가 자동 변환한 전자책(<code>/calibre-library</code>)을
+            Komga · Kavita · Audiobookshelf가 <strong>파일 중복 복사 없이(0바이트 추가 소모)</strong> 즉시 동시에 열람합니다.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Generated Stack Code & Maintenance Scripts Viewer -->
+    <section class="glass-card rounded-2xl p-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+        <div class="flex flex-wrap gap-2">
+          <button id="tabBtn-compose" onclick="switchTab('compose')" class="tab-active px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold border border-slate-700 transition flex items-center gap-2">
+            <i class="fa-brands fa-docker"></i>
+            <span>1. 통합 docker-compose.yml (compose.yaml)</span>
+          </button>
+          <button id="tabBtn-init" onclick="switchTab('init')" class="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-slate-900 text-slate-300 border border-slate-700 hover:bg-slate-800 transition flex items-center gap-2">
+            <i class="fa-solid fa-terminal text-emerald-400"></i>
+            <span>2. 시놀로지 초기화 &amp; DB 분리 스크립트</span>
+          </button>
+          <button id="tabBtn-komf" onclick="switchTab('komf')" class="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-slate-900 text-slate-300 border border-slate-700 hover:bg-slate-800 transition flex items-center gap-2">
+            <i class="fa-solid fa-robot text-amber-400"></i>
+            <span>3. Komf 한국어 메타데이터 (application.yml)</span>
+          </button>
+          <button id="tabBtn-doctor" onclick="switchTab('doctor')" class="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-slate-900 text-slate-300 border border-slate-700 hover:bg-slate-800 transition flex items-center gap-2">
+            <i class="fa-solid fa-user-doctor text-rose-400"></i>
+            <span>4. 정기 유지보수·DB 최적화 닥터 스크립트</span>
+          </button>
+          <button id="tabBtn-wiring" onclick="switchTab('wiring')" class="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-slate-900 text-slate-300 border border-slate-700 hover:bg-slate-800 transition flex items-center gap-2">
+            <i class="fa-solid fa-network-wired text-cyan-400"></i>
+            <span>5. 내부 연동 &amp; 모바일 앱 OPDS 주소록</span>
+          </button>
+        </div>
+        <button onclick="copyActiveTab()" class="px-4 py-2 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shrink-0">
+          <i class="fa-regular fa-copy mr-1"></i>현재 탭 내용 복사
+        </button>
+      </div>
+
+      <!-- Code Pane -->
+      <div id="codePaneWrapper" class="mt-4">
+        <pre id="codeOutput" class="code-box rounded-xl p-4 text-xs sm:text-sm text-indigo-100 overflow-x-auto max-h-[600px] leading-relaxed"></pre>
+      </div>
+
+      <!-- Wiring & Mobile Apps Guide Pane -->
+      <div id="wiringPaneWrapper" class="hidden mt-4 space-y-6">
+        <div id="wiringCards" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        <div class="border-t border-slate-800 pt-5">
+          <h3 class="text-base font-bold text-white mb-3 flex items-center gap-2">
+            <i class="fa-solid fa-mobile-screen-button text-indigo-400"></i>
+            <span>기기별 최고급 클라이언트 앱 &amp; OPDS 연결 가이드</span>
+          </h3>
+          <div id="clientAppsGrid" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. Live Synology NAS eBook Port Health Probe -->
+    <section class="glass-card rounded-2xl p-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+        <div>
+          <h2 class="text-base font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-heart-pulse text-emerald-400"></i>
+            <span>실시간 시놀로지 NAS eBook 컨테이너 포트 상태 점검기</span>
+          </h2>
+          <p class="text-xs text-slate-400 mt-0.5">
+            시놀로지 NAS에 스택을 배포한 후 각 eBook 웹 서버(Komga 8341, Kavita 5471, ABS 13378, Komf 8085 등)가 정상 응답하는지 즉시 확인합니다.
+          </p>
+        </div>
+        <button onclick="probeNasPorts()" class="px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-2 shrink-0">
+          <i class="fa-solid fa-satellite-dish"></i>
+          <span>NAS 포트 실시간 연결 테스트</span>
+        </button>
+      </div>
+      <div id="probeResultsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"></div>
+    </section>
+  </main>
+
+  <script>
+    let catalogData = null;
+    let generatedData = null;
+    let selectedServices = new Set();
+    let activeTab = 'compose';
+
+    async function initStudio() {
+      const res = await fetch('/api/catalog');
+      catalogData = await res.json();
+      catalogData.services.forEach(s => {
+        if (s.default_enabled) selectedServices.add(s.id);
+      });
+      renderOrganicPipelines();
+      renderDiagnosis();
+      renderPresets();
+      renderServices();
+      await triggerGenerate();
+      await probeNasPorts();
+    }
+
+    function renderOrganicPipelines() {
+      const grid = document.getElementById('organicPipelinesGrid');
+      if (!catalogData || !catalogData.organic_pipelines) return;
+      grid.innerHTML = catalogData.organic_pipelines.map(p => `
+        <div class="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
+          <h3 class="text-sm font-bold text-emerald-300">${p.title}</h3>
+          <div class="p-2 rounded-lg bg-slate-950 border border-slate-800 font-mono text-[11px] text-indigo-300 break-all">${p.flow}</div>
+          <p class="text-xs text-slate-300 leading-relaxed">${p.description}</p>
+        </div>
+      `).join('');
+    }
+
+    async function runRuntimeBootstrap() {
+      const banner = document.getElementById('runtimeActionBanner');
+      banner.classList.remove('hidden');
+      banner.textContent = '폴더 생성, Audiobookshelf DB 무손실 분리, Komf 설정 자동 프로비저닝 실행 중...';
+      const res = await fetch('/api/runtime/bootstrap', { method: 'POST' });
+      const data = await res.json();
+      banner.innerHTML = `<strong>[자동 프로비저닝 결과]</strong> ${data.message} ${data.actions && data.actions.length ? '(' + data.actions.join(' / ') + ')' : ''}`;
+    }
+
+    async function runRuntimeMaintenance() {
+      const banner = document.getElementById('runtimeActionBanner');
+      banner.classList.remove('hidden');
+      banner.textContent = 'SQLite 데이터베이스 VACUUM 최적화 및 설정 스냅샷 백업 실행 중...';
+      const res = await fetch('/api/runtime/maintenance', { method: 'POST' });
+      const data = await res.json();
+      banner.innerHTML = `<strong>[유지보수 완료]</strong> ${data.summary}`;
+    }
+
+    function renderDiagnosis() {
+      const container = document.getElementById('diagnosisContainer');
+      if (!catalogData || !catalogData.diagnosis) return;
+      container.innerHTML = catalogData.diagnosis.map(item => {
+        const badgeStyle = item.severity === 'CRITICAL'
+          ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+          : item.severity === 'HIGH'
+          ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+          : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40';
+        return `
+          <div class="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2.5">
+            <div class="flex items-center justify-between gap-2">
+              <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${badgeStyle}">
+                ${item.severity} · ${item.severity_label}
+              </span>
+              <span class="text-xs font-semibold text-slate-400">${item.service}</span>
+            </div>
+            <h3 class="text-sm font-bold text-white">${item.title}</h3>
+            <p class="text-xs text-slate-300 leading-relaxed">${item.cause}</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+              <div class="p-2 rounded-lg bg-rose-950/25 border border-rose-900/40">
+                <div class="text-[10px] font-bold text-rose-300 mb-1">❌ 기존 (Before)</div>
+                <pre class="text-[11px] text-rose-200/90 whitespace-pre-wrap font-mono">${item.before_snippet}</pre>
+              </div>
+              <div class="p-2 rounded-lg bg-emerald-950/25 border border-emerald-900/40">
+                <div class="text-[10px] font-bold text-emerald-300 mb-1">✅ 해결 완료 (After)</div>
+                <pre class="text-[11px] text-emerald-200/90 whitespace-pre-wrap font-mono">${item.after_snippet}</pre>
+              </div>
+            </div>
+            <p class="text-xs text-emerald-300/95 font-medium pt-0.5">
+              <i class="fa-solid fa-circle-check mr-1"></i>${item.solution}
+            </p>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function toggleDiagnosisCards() {
+      const el = document.getElementById('diagnosisContainer');
+      el.classList.toggle('hidden');
+    }
+
+    function renderPresets() {
+      const box = document.getElementById('presetList');
+      box.innerHTML = catalogData.presets.map(p => `
+        <button onclick="applyPreset('${p.id}')" class="w-full text-left p-3.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 transition group">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-sm text-white group-hover:text-indigo-300 transition">${p.name}</span>
+            <span class="text-[11px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-semibold">${p.badge}</span>
+          </div>
+          <p class="text-xs text-slate-400 mt-1 leading-relaxed">${p.description}</p>
+        </button>
+      `).join('');
+    }
+
+    function applyPreset(presetId) {
+      const preset = catalogData.presets.find(p => p.id === presetId);
+      if (!preset) return;
+      selectedServices = new Set(preset.services);
+      renderServices();
+      triggerGenerate();
+    }
+
+    function renderServices() {
+      const grid = document.getElementById('serviceGrid');
+      document.getElementById('selectedCount').textContent = selectedServices.size;
+      grid.innerHTML = catalogData.services.map(s => {
+        const active = selectedServices.has(s.id);
+        const portBadge = s.port ? `:${s.port}` : 'Background';
+        return `
+          <div onclick="toggleService('${s.id}')" class="p-3.5 rounded-xl border border-slate-800 bg-slate-900/75 cursor-pointer transition ${active ? 'svc-card-active' : 'opacity-60 hover:opacity-90'}">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <input type="checkbox" ${active ? 'checked' : ''} class="w-4 h-4 accent-indigo-500 pointer-events-none" />
+                <span class="font-bold text-sm text-white">${s.name}</span>
+              </div>
+              <span class="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-indigo-300 border border-slate-700">${portBadge}</span>
+            </div>
+            <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <span class="text-[10px] px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-300 font-semibold">${s.role_badge}</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 font-semibold">${s.tuning_badge}</span>
+            </div>
+            <p class="text-xs text-slate-300 mt-2 leading-relaxed">${s.description}</p>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function toggleService(id) {
+      if (selectedServices.has(id)) {
+        if (selectedServices.size > 1) selectedServices.delete(id);
+      } else {
+        selectedServices.add(id);
+      }
+      renderServices();
+      triggerGenerate();
+    }
+
+    function collectConfigPayload() {
+      return {
+        nas_ip: document.getElementById('cfgNasIp').value.trim() || '192.168.1.100',
+        puid: 1026,
+        pgid: 100,
+        tz: 'Asia/Seoul',
+        docker_root: document.getElementById('cfgDockerRoot').value.trim() || '/volume1/docker',
+        ebook_data_root: document.getElementById('cfgDataRoot').value.trim() || '/volume1/data/ebooks',
+        container_prefix: document.getElementById('cfgPrefix').value,
+        keep_legacy_mounts: document.getElementById('cfgKeepLegacy').checked,
+        komga_port: parseInt(document.getElementById('cfgKomgaPort').value || '8341', 10),
+        kavita_port: parseInt(document.getElementById('cfgKavitaPort').value || '5471', 10),
+        audiobookshelf_port: parseInt(document.getElementById('cfgAbsPort').value || '13378', 10),
+        komf_port: parseInt(document.getElementById('cfgKomfPort').value || '8085', 10),
+        selected_services: Array.from(selectedServices),
+      };
+    }
+
+    async function triggerGenerate() {
+      const payload = collectConfigPayload();
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      generatedData = await res.json();
+      updateTabContent();
+    }
+
+    function switchTab(tab) {
+      activeTab = tab;
+      ['compose', 'init', 'komf', 'doctor', 'wiring'].forEach(t => {
+        const btn = document.getElementById(`tabBtn-${t}`);
+        if (t === tab) {
+          btn.className = 'tab-active px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold border border-slate-700 transition flex items-center gap-2';
+        } else {
+          btn.className = 'px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-slate-900 text-slate-300 border border-slate-700 hover:bg-slate-800 transition flex items-center gap-2';
+        }
+      });
+      updateTabContent();
+    }
+
+    function updateTabContent() {
+      if (!generatedData) return;
+      const codeWrapper = document.getElementById('codePaneWrapper');
+      const wiringWrapper = document.getElementById('wiringPaneWrapper');
+      const codeOutput = document.getElementById('codeOutput');
+
+      if (activeTab === 'wiring') {
+        codeWrapper.classList.add('hidden');
+        wiringWrapper.classList.remove('hidden');
+        renderWiringAndClients();
+        return;
+      }
+
+      codeWrapper.classList.remove('hidden');
+      wiringWrapper.classList.add('hidden');
+
+      if (activeTab === 'compose') {
+        codeOutput.textContent = generatedData.docker_compose;
+      } else if (activeTab === 'init') {
+        codeOutput.textContent = generatedData.synology_init_script;
+      } else if (activeTab === 'komf') {
+        codeOutput.textContent = generatedData.komf_application_yml;
+      } else if (activeTab === 'doctor') {
+        codeOutput.textContent = generatedData.maintenance_doctor_script;
+      }
+    }
+
+    function renderWiringAndClients() {
+      const wiringCards = document.getElementById('wiringCards');
+      wiringCards.innerHTML = (generatedData.wiring_guide || []).map(w => `
+        <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
+          <div class="text-xs font-bold text-indigo-400">${w.step}</div>
+          <div class="text-sm font-bold text-white">${w.target}</div>
+          <div class="p-2 rounded bg-slate-950 border border-slate-800 font-mono text-xs text-emerald-300 break-all">${w.internal_address}</div>
+          <p class="text-xs text-slate-300 leading-relaxed">${w.details}</p>
+        </div>
+      `).join('');
+
+      const cfg = collectConfigPayload();
+      const clientGrid = document.getElementById('clientAppsGrid');
+      clientGrid.innerHTML = (catalogData.client_apps_guide || []).map(group => `
+        <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+          <h4 class="text-sm font-bold text-white flex items-center gap-2">
+            <i class="fa-solid ${group.icon} text-indigo-400"></i>
+            <span>${group.category}</span>
+          </h4>
+          <div class="space-y-3">
+            ${group.clients.map(c => {
+              const url = c.url_template
+                .replace('{nas_ip}', cfg.nas_ip)
+                .replace('{komga_port}', cfg.komga_port)
+                .replace('{kavita_port}', cfg.kavita_port)
+                .replace('{abs_port}', cfg.audiobookshelf_port)
+                .replace('{cwa_port}', 8083);
+              return `
+                <div class="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800/90 space-y-1">
+                  <div class="text-xs font-bold text-indigo-300">${c.device}</div>
+                  <div class="text-xs text-white font-semibold">추천 앱: ${c.apps}</div>
+                  <div class="text-[11px] font-mono text-emerald-300 break-all">${url}</div>
+                  <p class="text-[11px] text-slate-400 leading-relaxed">${c.tip}</p>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function copyActiveTab() {
+      if (!generatedData) return;
+      let text = generatedData.docker_compose;
+      if (activeTab === 'init') text = generatedData.synology_init_script;
+      else if (activeTab === 'komf') text = generatedData.komf_application_yml;
+      else if (activeTab === 'doctor') text = generatedData.maintenance_doctor_script;
+      else if (activeTab === 'wiring') text = generatedData.env_template;
+
+      await navigator.clipboard.writeText(text);
+      const label = document.getElementById('copyBtnLabel');
+      const old = label.textContent;
+      label.textContent = '복사 완료!';
+      setTimeout(() => { label.textContent = old; }, 2000);
+    }
+
+    async function downloadZipBundle() {
+      const payload = collectConfigPayload();
+      const res = await fetch('/api/download-bundle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'ebook-stack-bundle.zip';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    async function probeNasPorts() {
+      const nasIp = document.getElementById('cfgNasIp').value.trim() || '192.168.1.100';
+      const grid = document.getElementById('probeResultsGrid');
+      grid.innerHTML = `<div class="col-span-full text-xs text-slate-400">포트 상태 확인 중...</div>`;
+      const res = await fetch('/api/probe-services', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nas_ip: nasIp }),
+      });
+      const data = await res.json();
+      grid.innerHTML = data.results.map(r => `
+        <a href="${r.url}" target="_blank" class="p-3 rounded-xl bg-slate-900 border ${r.reachable ? 'border-emerald-500/50' : 'border-slate-800'} hover:border-indigo-500/50 transition block">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-white">${r.name}</span>
+            <span class="w-2.5 h-2.5 rounded-full ${r.reachable ? 'bg-emerald-400' : 'bg-amber-400'}"></span>
+          </div>
+          <div class="text-[11px] font-mono text-indigo-300 mt-1">:${r.port} (${r.container_name})</div>
+          <div class="text-[11px] text-slate-400 mt-1">${r.status_text}</div>
+        </a>
+      `).join('');
+    }
+
+    window.addEventListener('DOMContentLoaded', initStudio);
+  </script>
+</body>
+</html>
