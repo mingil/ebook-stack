@@ -32,17 +32,20 @@ if [ -f "/volume1/docker/audiobookshelf/absdatabase.sqlite" ] && [ ! -f "/volume
   [ -d "/volume1/docker/audiobookshelf/migrations" ] && cp -rn "/volume1/docker/audiobookshelf/migrations" "/volume1/docker/audiobookshelf/config/" 2>/dev/null || true
 fi
 
-echo '[3/5] 통합 마스터 eBook 서재 폴더 구조(/volume1/data/ebooks) 생성 중...'
-mkdir -p "/volume1/data/ebooks/manga"
-mkdir -p "/volume1/data/ebooks/webtoon"
-mkdir -p "/volume1/data/ebooks/comics"
-mkdir -p "/volume1/data/ebooks/lightnovels"
-mkdir -p "/volume1/data/ebooks/books"
-mkdir -p "/volume1/data/ebooks/audiobooks"
-mkdir -p "/volume1/data/ebooks/podcasts"
-mkdir -p "/volume1/data/ebooks/magazines"
-mkdir -p "/volume1/data/ebooks/cwa-ingest"
-mkdir -p "/volume1/data/ebooks/calibre-library"
+echo '[3/5] 통합 마스터 eBook 서재 폴더 구조(/volume1/mediarr/ebooks) 및 기존 캘리버 서재 이관 점검 중...'
+mkdir -p "/volume1/mediarr/ebooks/manga"
+mkdir -p "/volume1/mediarr/ebooks/webtoon"
+mkdir -p "/volume1/mediarr/ebooks/comics"
+mkdir -p "/volume1/mediarr/ebooks/lightnovels"
+mkdir -p "/volume1/mediarr/ebooks/books"
+mkdir -p "/volume1/mediarr/ebooks/audiobooks"
+mkdir -p "/volume1/mediarr/ebooks/podcasts"
+mkdir -p "/volume1/mediarr/ebooks/magazines"
+mkdir -p "/volume1/mediarr/ebooks/cwa-ingest"
+mkdir -p "/volume1/mediarr/ebooks/calibre-library"
+if [ -f "/volume1/docker/calibre/캘리버 서재/metadata.db" ] && [ ! -f "/volume1/mediarr/ebooks/calibre-library/metadata.db" ]; then
+  cp -rn "/volume1/docker/calibre/캘리버 서재/"* "/volume1/mediarr/ebooks/calibre-library/" 2>/dev/null || true
+fi
 
 echo '[4/5] Komf 한국어·글로벌 메타데이터 설정 파일(application.yml) 준비 중...'
 if [ ! -f "/volume1/docker/komf/config/application.yml" ]; then
@@ -55,7 +58,7 @@ if [ ! -f "/volume1/docker/komf/config/application.yml" ]; then
 
 komga:
   baseUri: "http://komga:25600"
-  komgaUser: "fauna035@gmail.com"
+  komgaUser: "admin@example.com"
   komgaPassword: "YOUR_KOMGA_PASSWORD"
   eventListener:
     enabled: true
@@ -88,7 +91,7 @@ komga:
 
 kavita:
   baseUri: "http://kavita:5000"
-  apiKey: "JR5SNjbYayxiZtzTgEIWOTfZ6Od3iyTa"
+  apiKey: "CHANGE_ME_KAVITA_API_KEY"
   eventListener:
     enabled: true
     metadataLibraryFilter: []
@@ -154,7 +157,7 @@ KOMF_EOF
 fi
 
 echo '[5/5] 시놀로지 표준 사용자 권한(PUID=1026, PGID=100) 일괄 적용 중...'
-chown -R 1026:100 "/volume1/docker/komga" "/volume1/docker/kavita" "/volume1/docker/audiobookshelf" "/volume1/docker/komf" "/volume1/docker/calibre-web-automated" "/volume1/docker/cwa-book-downloader" "/volume1/docker/suwayomi" "/volume1/docker/readarr" "/volume1/docker/stirling-pdf" "/volume1/data/ebooks"
-chmod -R 775 "/volume1/data/ebooks"
+chown -R 1026:100 "/volume1/docker/komga" "/volume1/docker/kavita" "/volume1/docker/audiobookshelf" "/volume1/docker/komf" "/volume1/docker/calibre-web-automated" "/volume1/docker/cwa-book-downloader" "/volume1/docker/suwayomi" "/volume1/docker/readarr" "/volume1/docker/stirling-pdf" "/volume1/mediarr/ebooks"
+chmod -R 775 "/volume1/mediarr/ebooks"
 
 echo '✅ eBook Stack 폴더 생성, DB 무손실 분리, 권한 적용이 100% 완료되었습니다!'

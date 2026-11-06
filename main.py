@@ -1,8 +1,10 @@
-"""FastAPI Backend for the Unified eBook, Manga, Webtoon & Audiobook Stack Control Center (ebook-stack)."""
+"""FastAPI Backend for the Unified eBook, Manga, Webtoon & Audiobook Stack Control Center (ebook-stack v1.3.0)."""
 
 import asyncio
+import base64
 import io
 import os
+import secrets
 import zipfile
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
@@ -10,12 +12,13 @@ from typing import Any, Dict, List
 
 import httpx
 import yaml
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from app.auto_wirer import auto_wire_all_ebook_services
 from app.ebook_catalog import (
     CLIENT_APPS_GUIDE,
     DIAGNOSIS_REPORT,
@@ -46,34 +49,57 @@ STACKS_DIR = BASE_DIR / "stacks"
 LEGACY_DIR = BASE_DIR / "legacy-backup"
 
 
-async def _daily_maintenance_loop() -> None:
-    """Automatically back up SQLite DBs & run VACUUM every 24h so Watchtower updates are 100% safe."""
-    while True:
-        await asyncio.sleep(86400)
+async def _periodic_maintenance_loop(interval_hours: float) -> None:
+    """Background loop inside ebook-control-center: continuously auto-wires services and runs 24h SQLite WAL optimization."""
+    # Phase 1: First 10 minutes after boot — run every 30s so newly booted containers are wired immediately
+    for _ in range(20):
+        await asyncio.sleep(30.0)
         with suppress(Exception):
-            run_sqlite_maintenance_and_backup()
+            await asyncio.to_thread(bootstrap_host_environment)
+            await auto_wire_all_ebook_services()
+
+    # Phase 2: Steady state — check auto-wiring every 10 minutes, run SQLite VACUUM & backup every interval_hours
+    wire_interval = 600.0
+    maint_interval = max(3600.0, interval_hours * 3600.0)
+    elapsed_since_maint = 0.0
+    while True:
+        await asyncio.sleep(wire_interval)
+        elapsed_since_maint += wire_interval
+        with suppress(Exception):
+            await asyncio.to_thread(bootstrap_host_environment)
+            await auto_wire_all_ebook_services()
+            if elapsed_since_maint >= maint_interval:
+                await asyncio.to_thread(run_sqlite_maintenance_and_backup)
+                elapsed_since_maint = 0.0
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     if os.environ.get("AUTO_BOOTSTRAP", "true").lower() == "true":
         bootstrap_host_environment()
-    maint_task = None
-    if os.environ.get("AUTO_DAILY_MAINTENANCE", "true").lower() == "true":
-        maint_task = asyncio.create_task(_daily_maintenance_loop())
+
+    interval_str = os.environ.get("AUTO_MAINTENANCE_INTERVAL_HOURS", "24")
+    bg_task = None
+    try:
+        interval_hours = float(interval_str)
+        if interval_hours > 0 and os.environ.get("AUTO_DAILY_MAINTENANCE", "true").lower() == "true":
+            bg_task = asyncio.create_task(_periodic_maintenance_loop(interval_hours))
+    except ValueError:
+        pass
+
     try:
         yield
     finally:
-        if maint_task:
-            maint_task.cancel()
+        if bg_task:
+            bg_task.cancel()
             with suppress(asyncio.CancelledError):
-                await maint_task
+                await bg_task
 
 
 app = FastAPI(
     title="Ultimate eBook & Manga Stack Control Center (ebook-stack)",
-    description="시놀로지 NAS (DS920+) 맞춤형 Komga · Kavita · Audiobookshelf · Komf · Calibre-Web-Automated · Suwayomi 단일 프로젝트 통합 관제 스튜디오",
-    version="1.1.0",
+    description="시놀로지 NAS (DS920+) 맞춤형 Komga · Kavita · Audiobookshelf · Komf · Calibre-Web-Automated · Suwayomi · Readarr 단일 프로젝트 통합 관제 스튜디오",
+    version="1.3.0",
     lifespan=lifespan,
 )
 
@@ -86,8 +112,33 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def basic_auth_middleware(request: Request, call_next):
+    """Optional HTTP Basic Auth protection when CONTROL_CENTER_PASSWORD is set in .env."""
+    expected_pass = os.environ.get("CONTROL_CENTER_PASSWORD", "").strip()
+    if not expected_pass or request.url.path == "/api/health":
+        return await call_next(request)
+
+    expected_user = os.environ.get("CONTROL_CENTER_USER", "admin").strip() or "admin"
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Basic "):
+        try:
+            decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
+            user, _, pwd = decoded.partition(":")
+            if secrets.compare_digest(user, expected_user) and secrets.compare_digest(pwd, expected_pass):
+                return await call_next(request)
+        except Exception:
+            pass
+
+    return Response(
+        content="eBook Control Center: 관리자 로그인이 필요합니다.",
+        status_code=401,
+        headers={"WWW-Authenticate": 'Basic realm="eBook Control Center"'},
+    )
+
+
 class ProbeRequest(BaseModel):
-    nas_ip: str = "192.168.1.100"
+    nas_ip: str = "192.168.0.100"
     services: List[str] = [
         "ebook-control-center",
         "komga",
@@ -109,8 +160,11 @@ async def health_check() -> Dict[str, Any]:
         "status": "ok",
         "service": "ebook-stack",
         "image": "kimmingil/ebook-stack:latest",
-        "version": "1.1.0",
-        "architecture": "Unified Single-Project Docker Compose + Active Runtime Control Center",
+        "version": "1.3.0",
+        "architecture": "Unified Single-Project Docker Compose + Zero-Touch REST API Auto-Wirer",
+        "watchtower_service_duplicated": False,
+        "watchtower_labels_enabled": True,
+        "auto_maintenance_scheduler": "24h internal loop active",
         "diagnosed_issues_resolved": len(DIAGNOSIS_REPORT),
         "organic_pipelines_count": len(ORGANIC_PIPELINES),
     }
@@ -126,7 +180,7 @@ async def get_diagnosis() -> Dict[str, Any]:
     return {
         "project_renamed_from": "ebook-library",
         "project_renamed_to": "ebook-stack",
-        "container_naming_scheme": "ebook-<서비스명> (내부 DNS 호스트네임 양방향 호환)",
+        "container_naming_scheme": "ebook-<서비스명> (내부 DNS 호스트네임 양방향 호환 + 기존 Watchtower 라벨 완비)",
         "issues_count": len(DIAGNOSIS_REPORT),
         "issues": DIAGNOSIS_REPORT,
         "organic_pipelines": ORGANIC_PIPELINES,
@@ -140,9 +194,9 @@ async def get_catalog() -> Dict[str, Any]:
     presets = [
         {
             "id": "ultimate_full",
-            "name": "🏆 현존 최고 완벽 통합 스택 (관제 센터 + 10대 서비스 전체)",
+            "name": "🏆 현존 최고 완벽 통합 스택 (관제 센터 + 10대 eBook 서버 전체)",
             "badge": "단일 프로젝트 풀 구성",
-            "description": "eBook Control Center(:8500) + Komga + Kavita + Audiobookshelf + Komf + Calibre-Web-Automated + CWA-Downloader + Suwayomi + Readarr + Stirling-PDF + FlareSolverr",
+            "description": "eBook Control Center(:8586) + Komga(:8341) + Kavita(:5471) + Audiobookshelf(:13378) + Komf(:8085) + Calibre-Web-Automated(:8083) + CWA-Downloader(:8084) + Suwayomi(:4567) + Readarr(:8787) + Stirling-PDF(:8087) + FlareSolverr(:8192)",
             "services": [s["id"] for s in EBOOK_SERVICES_CATALOG],
         },
         {
@@ -163,9 +217,9 @@ async def get_catalog() -> Dict[str, Any]:
         },
         {
             "id": "legacy_fixed_4",
-            "name": "🔧 기존 업로드 4대장 무결점 교정 스택 (관제 센터 + 4대장)",
+            "name": "🔧 기존 4대장 무결점 교정 스택 (관제 센터 + 4대장)",
             "badge": "기존 구성 100% 호환 + 버그 완치",
-            "description": "업로드하신 Komga(8341) + Kavita(5471) + Audiobookshelf(13378) + Komf(8085) 4종의 중첩 볼륨 버그, 권한 누락, 부팅 순서 오류를 완벽 해결한 스택",
+            "description": "기존 Komga(8341) + Kavita(5471) + Audiobookshelf(13378) + Komf(8085) 4종의 중첩 볼륨 버그, 권한 누락, 부팅 순서 오류를 완벽 해결한 스택",
             "services": [
                 "ebook-control-center",
                 "komga",
@@ -215,13 +269,25 @@ async def generate_stack(cfg: EbookStackConfigRequest) -> Dict[str, Any]:
 
 @app.post("/api/runtime/bootstrap")
 async def trigger_runtime_bootstrap() -> Dict[str, Any]:
-    """Trigger immediate directory creation, Audiobookshelf DB migration, and Komf config generation."""
-    return bootstrap_host_environment()
+    """Trigger immediate directory creation, Audiobookshelf & Calibre migration, and REST API auto-wiring."""
+    boot = bootstrap_host_environment()
+    wire = await auto_wire_all_ebook_services()
+    return {
+        **boot,
+        "auto_wire": wire,
+    }
+
+
+@app.post("/api/runtime/autowire")
+async def trigger_runtime_autowire() -> Dict[str, Any]:
+    """Trigger Zero-Touch REST API & Config Auto-Wirer for Komga, Kavita, ABS, CWA, Suwayomi, Readarr, and Prowlarr."""
+    bootstrap_host_environment()
+    return await auto_wire_all_ebook_services()
 
 
 @app.post("/api/runtime/maintenance")
 async def trigger_runtime_maintenance() -> Dict[str, Any]:
-    """Trigger immediate SQLite VACUUM optimization and config tar.gz backup."""
+    """Trigger immediate SQLite WAL checkpoint, VACUUM optimization and config tar.gz backup."""
     return run_sqlite_maintenance_and_backup()
 
 
@@ -269,7 +335,7 @@ async def probe_services(req: ProbeRequest) -> Dict[str, Any]:
     results = []
     svc_map = {s["id"]: s for s in EBOOK_SERVICES_CATALOG}
 
-    async with httpx.AsyncClient(timeout=2.0, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=2.5, follow_redirects=True) as client:
         for svc_id in req.services:
             svc = svc_map.get(svc_id)
             if not svc or not svc.get("webui_port"):

@@ -1,11 +1,12 @@
 # =============================================================================
-# 📚 ULTIMATE SYNOLOGY EBOOK, MANGA, WEBTOON & AUDIOBOOK STACK (ebook-stack)
+# 📚 ULTIMATE SYNOLOGY EBOOK, MANGA, WEBTOON & AUDIOBOOK STACK (ebook-stack v1.3.0)
 # =============================================================================
 # • 프로젝트명   : ebook-stack (단일 프로젝트 & 단일 docker-compose.yml 통합 아키텍처)
-# • 통합 이미지  : kimmingil/ebook-stack:latest (자동 초기화 · 실시간 관제 · DB 최적화 내장)
+# • 통합 이미지  : kimmingil/ebook-stack:latest (폴더/권한 자동 초기화 · REST API 자동 배선 · 24h DB 닥터)
 # • 시놀로지 권한: PUID=1026 / PGID=100 / TZ=Asia/Seoul
 # • 설정 경로    : /volume1/docker/<서비스명> (순수 Config & DB 전용 완벽 분리)
-# • 마스터 서재  : /volume1/data/ebooks:/data:rw (전 컨테이너 단일 볼륨 유기적 공유 & 하드링크 지원)
+# • 마스터 서재  : /volume1/mediarr/ebooks:/ebooks:rw & /volume1/mediarr:/data:rw (Mediarr-Stack 0.1초 하드링크 연동)
+# • 기존 호환성  : 기존 Komga(/data), Kavita(/manga), ABS(/audiobooks), Calibre 서재 100% 무손실 승계
 # =============================================================================
 
 version: "3.9"
@@ -25,7 +26,7 @@ x-logging: &default-logging
 
 services:
   # ---------------------------------------------------------------------------
-  # 🎛️ 0. EBOOK CONTROL CENTER - 통합 관제 · 폴더/설정 자동 초기화 · DB 최적화 엔진
+  # 🎛️ 0. EBOOK CONTROL CENTER - 폴더/권한(1026:100) 초기화 · Zero-Touch API 배선 · 24h DB 닥터
   # ---------------------------------------------------------------------------
   ebook-control-center:
     image: kimmingil/ebook-stack:latest
@@ -36,6 +37,8 @@ services:
         aliases:
           - ebook-control-center
           - ebook-stack
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     labels:
       com.centurylinklabs.watchtower.enable: "true"
     security_opt:
@@ -47,16 +50,20 @@ services:
       PORT: 8500
       AUTO_BOOTSTRAP: "true"
       AUTO_DAILY_MAINTENANCE: "true"
+      AUTO_MAINTENANCE_INTERVAL_HOURS: "24"
       HOST_DOCKER_MOUNT: /host-docker
       HOST_DATA_MOUNT: /host-data
-      KOMGA_USER: ${KOMGA_USER:-fauna035@gmail.com}
+      NAS_IP: ${NAS_IP:-192.168.0.100}
+      KOMGA_USER: ${KOMGA_USER:-admin@example.com}
       KOMGA_PASSWORD: ${KOMGA_PASSWORD:-}
       KAVITA_API_KEY: ${KAVITA_API_KEY:-}
+      CONTROL_CENTER_USER: ${CONTROL_CENTER_USER:-admin}
+      CONTROL_CENTER_PASSWORD: ${CONTROL_CENTER_PASSWORD:-}
     ports:
-      - "8500:8500"
+      - "8586:8500"
     volumes:
       - /volume1/docker:/host-docker:rw
-      - /volume1/data/ebooks:/host-data:rw
+      - /volume1/mediarr/ebooks:/host-data:rw
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8500/api/health >/dev/null || exit 1"]
       interval: 30s
@@ -67,7 +74,7 @@ services:
     logging: *default-logging
 
   # ---------------------------------------------------------------------------
-  # 📚 1. KOMGA - 만화·웹툰·매거진 메인 미디어 서버 (G1GC 메모리 최적화)
+  # 📚 1. KOMGA - 만화·웹툰·매거진 메인 미디어 서버 (기존 /data 서재 100% 보존 + G1GC 최적화)
   # ---------------------------------------------------------------------------
   komga:
     image: gotson/komga:latest
@@ -93,9 +100,9 @@ services:
       - "8341:25600"
     volumes:
       - /volume1/docker/komga/config:/config:rw
-      - /volume1/data/ebooks:/data:rw
-      - /volume1/data/ebooks/calibre-library:/calibre-library:rw
-      - /volume1/docker/komga/data:/legacy-komga-data:rw
+      - /volume1/docker/komga/data:/data:rw
+      - /volume1/mediarr/ebooks:/ebooks:rw
+      - /volume1/mediarr/ebooks/calibre-library:/calibre-library:rw
     depends_on:
       ebook-control-center:
         condition: service_healthy
@@ -109,7 +116,7 @@ services:
     logging: *default-logging
 
   # ---------------------------------------------------------------------------
-  # 🌟 2. KAVITA - 라이트노벨(EPUB)·소설·만화 초고속 하이브리드 서버
+  # 🌟 2. KAVITA - 라이트노벨(EPUB)·소설·만화 초고속 하이브리드 서버 (기존 /manga 서재 보존)
   # ---------------------------------------------------------------------------
   kavita:
     image: jvmilazz0/kavita:latest
@@ -135,12 +142,12 @@ services:
       - "5471:5000"
     volumes:
       - /volume1/docker/kavita/config:/kavita/config:rw
-      - /volume1/data/ebooks:/data:rw
-      - /volume1/data/ebooks/manga:/manga:rw
-      - /volume1/data/ebooks/lightnovels:/lightnovels:rw
-      - /volume1/data/ebooks/books:/books:rw
-      - /volume1/data/ebooks/calibre-library:/calibre-library:rw
-      - /volume1/docker/kavita/data:/legacy-kavita-manga:rw
+      - /volume1/docker/kavita/data:/manga:rw
+      - /volume1/mediarr/ebooks:/ebooks:rw
+      - /volume1/mediarr/ebooks:/data:rw
+      - /volume1/mediarr/ebooks/lightnovels:/lightnovels:rw
+      - /volume1/mediarr/ebooks/books:/books:rw
+      - /volume1/mediarr/ebooks/calibre-library:/calibre-library:rw
     depends_on:
       ebook-control-center:
         condition: service_healthy
@@ -154,7 +161,7 @@ services:
     logging: *default-logging
 
   # ---------------------------------------------------------------------------
-  # 🎧 3. AUDIOBOOKSHELF - 오디오북·팟캐스트·전자책 스트리밍 서버
+  # 🎧 3. AUDIOBOOKSHELF - 오디오북·팟캐스트·전자책 스트리밍 서버 (기존 /audiobooks 서재 보존)
   # ---------------------------------------------------------------------------
   audiobookshelf:
     image: advplyr/audiobookshelf:latest
@@ -176,24 +183,25 @@ services:
       TZ: ${TZ:-Asia/Seoul}
       CONFIG_PATH: /config
       METADATA_PATH: /metadata
-      PORT: 80
+      PORT: 13378
+      JWT_SECRET_KEY: ${ABS_JWT_SECRET:-CHANGE_ME_ABS_JWT_SECRET_KEY}
     ports:
-      - "13378:80"
+      - "13378:13378"
     volumes:
       # ✅ [핵심 수정 완료] 기존 상위 폴더(/volume1/docker/audiobookshelf) 중첩 마운트 버그를 /config 하위 분리로 해결
       - /volume1/docker/audiobookshelf/config:/config:rw
       - /volume1/docker/audiobookshelf/metadata:/metadata:rw
-      - /volume1/data/ebooks/audiobooks:/audiobooks:rw
-      - /volume1/data/ebooks/podcasts:/podcasts:rw
-      - /volume1/data/ebooks/books:/books:rw
-      - /volume1/data/ebooks/lightnovels:/lightnovels:rw
-      - /volume1/data/ebooks/calibre-library:/calibre-library:rw
-      - /volume1/docker/audiobookshelf/audiobooks:/legacy-audiobooks:rw
+      - /volume1/docker/audiobookshelf/audiobooks:/audiobooks:rw
+      - /volume1/mediarr/ebooks:/ebooks:rw
+      - /volume1/mediarr/ebooks/podcasts:/podcasts:rw
+      - /volume1/mediarr/ebooks/books:/books:rw
+      - /volume1/mediarr/ebooks/lightnovels:/lightnovels:rw
+      - /volume1/mediarr/ebooks/calibre-library:/calibre-library:rw
     depends_on:
       ebook-control-center:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "nc -z 127.0.0.1 80 >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:80/ping >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 13378 >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:13378/ping >/dev/null 2>&1 || exit 1"]
       interval: 20s
       timeout: 5s
       retries: 3
@@ -272,14 +280,15 @@ services:
       TZ: ${TZ:-Asia/Seoul}
       PUID: ${PUID:-1026}
       PGID: ${PGID:-100}
+      NETWORK_SHARE_MODE: "true"
       HARDCOVER_TOKEN: ${HARDCOVER_TOKEN:-}
     ports:
       - "8083:8083"
     volumes:
       - /volume1/docker/calibre-web-automated/config:/config:rw
-      - /volume1/data/ebooks/cwa-ingest:/cwa-book-ingest:rw
-      - /volume1/data/ebooks/calibre-library:/calibre-library:rw
-      - /volume1/data/ebooks/books:/books:rw
+      - /volume1/mediarr/ebooks/cwa-ingest:/cwa-book-ingest:rw
+      - /volume1/mediarr/ebooks/calibre-library:/calibre-library:rw
+      - /volume1/mediarr/ebooks/books:/books:rw
     depends_on:
       ebook-control-center:
         condition: service_healthy
@@ -287,8 +296,8 @@ services:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8083 >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:8083 >/dev/null 2>&1 || bash -c '</dev/tcp/127.0.0.1/8083' >/dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 60s
+      retries: 5
+      start_period: 120s
     restart: on-failure:5
     logging: *default-logging
 
@@ -323,9 +332,9 @@ services:
       - "8084:8084"
     volumes:
       - /volume1/docker/cwa-book-downloader/config:/config:rw
-      - /volume1/data/ebooks/cwa-ingest:/books:rw
-      - /volume1/data/ebooks/cwa-ingest:/cwa-book-ingest:rw
-      - /volume1/data/ebooks/audiobooks:/audiobooks:rw
+      - /volume1/mediarr/ebooks/cwa-ingest:/books:rw
+      - /volume1/mediarr/ebooks/cwa-ingest:/cwa-book-ingest:rw
+      - /volume1/mediarr/ebooks/audiobooks:/audiobooks:rw
     depends_on:
       ebook-control-center:
         condition: service_healthy
@@ -369,8 +378,9 @@ services:
       - "4567:4567"
     volumes:
       - /volume1/docker/suwayomi:/home/suwayomi/.local/share/Tachidesk:rw
-      - /volume1/data/ebooks/manga:/home/suwayomi/.local/share/Tachidesk/downloads:rw
-      - /volume1/data/ebooks:/data:rw
+      - /volume1/mediarr/ebooks/manga:/home/suwayomi/.local/share/Tachidesk/downloads:rw
+      - /volume1/mediarr/ebooks:/ebooks:rw
+      - /volume1/mediarr/ebooks:/data:rw
     depends_on:
       ebook-control-center:
         condition: service_healthy
@@ -384,10 +394,10 @@ services:
     logging: *default-logging
 
   # ---------------------------------------------------------------------------
-  # 📡 8. READARR - Prowlarr·qBittorrent 연동 신간 전자책·오디오북 자동 수집
+  # 📡 8. READARR - Mediarr Prowlarr·qBittorrent 연동 신간 전자책·오디오북 자동 수집
   # ---------------------------------------------------------------------------
   readarr:
-    image: lscr.io/linuxserver/readarr:nightly
+    image: lscr.io/linuxserver/readarr:0.4.18-develop
     container_name: ebook-readarr
     hostname: readarr
     networks:
@@ -395,6 +405,8 @@ services:
         aliases:
           - readarr
           - ebook-readarr
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     labels:
       com.centurylinklabs.watchtower.enable: "true"
     mem_limit: 1g
@@ -408,8 +420,8 @@ services:
       - "8787:8787"
     volumes:
       - /volume1/docker/readarr:/config:rw
-      - /volume1/data/ebooks:/ebooks:rw
-      - /volume1/data:/data:rw
+      - /volume1/mediarr/ebooks:/ebooks:rw
+      - /volume1/mediarr:/data:rw
     depends_on:
       ebook-control-center:
         condition: service_healthy
@@ -465,7 +477,7 @@ services:
     logging: *default-logging
 
   # ---------------------------------------------------------------------------
-  # 🛡️ 10. FLARESOLVERR - Suwayomi·CWA·Readarr용 Cloudflare 자동 우회 프록시
+  # 🛡️ 10. FLARESOLVERR - Suwayomi·CWA용 Cloudflare 자동 우회 프록시 (호스트 :8192 / 내부 :8191)
   # ---------------------------------------------------------------------------
   flaresolverr:
     image: ghcr.io/flaresolverr/flaresolverr:latest
@@ -486,12 +498,12 @@ services:
       LOG_LEVEL: info
       CAPTCHA_SOLVER: none
     ports:
-      - "8191:8191"
+      - "8192:8191"
     depends_on:
       ebook-control-center:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8191/health >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:8191/health >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8191/health\")' >/dev/null 2>&1 || curl -fsS http://127.0.0.1:8191/health >/dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

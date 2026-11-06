@@ -1,22 +1,25 @@
-"""Ultimate Synology eBook, Manga, Webtoon & Audiobook Stack Generator."""
+"""Ultimate Synology eBook, Manga, Webtoon & Audiobook Stack Generator (v1.3.0)."""
 
 from typing import Dict, List
 from pydantic import BaseModel, Field
 
 
 class EbookStackConfigRequest(BaseModel):
-    nas_ip: str = Field(default="192.168.1.100", description="시놀로지 NAS 내부 IP 주소")
+    nas_ip: str = Field(default="192.168.0.100", description="시놀로지 NAS 내부 IP 주소")
     puid: int = Field(default=1026, description="시놀로지 사용자 PUID (기본 1026)")
     pgid: int = Field(default=100, description="시놀로지 그룹 PGID (기본 100)")
     tz: str = Field(default="Asia/Seoul", description="타임존")
     docker_root: str = Field(default="/volume1/docker", description="도커 설정 폴더 루트 경로")
-    ebook_data_root: str = Field(default="/volume1/data/ebooks", description="통합 전자책·만화·오디오북 데이터 마스터 경로")
+    ebook_data_root: str = Field(
+        default="/volume1/mediarr/ebooks",
+        description="통합 전자책·만화·오디오북 데이터 마스터 경로 (/volume1/mediarr 기반 0.1초 하드링크 지원)",
+    )
     container_prefix: str = Field(default="ebook-", description="컨테이너 이름 프리픽스 (예: ebook-komga)")
     keep_legacy_mounts: bool = Field(
         default=True,
-        description="기존 업로드된 /volume1/docker/{komga,kavita,audiobookshelf} 내부 데이터 경로를 호환 마운트로 함께 유지",
+        description="기존 업로드된 /volume1/docker/{komga,kavita,audiobookshelf} 내부 데이터 경로를 원래 위치 그대로 100% 무손실 유지",
     )
-    control_port: int = Field(default=8500, description="eBook Control Center 웹 대시보드 포트")
+    control_port: int = Field(default=8586, description="eBook Control Center 웹 대시보드 포트 (mediarr 8585와 공존)")
     komga_port: int = Field(default=8341, description="Komga 호스트 포트 (기존 8341 유지)")
     kavita_port: int = Field(default=5471, description="Kavita 호스트 포트 (기존 5471 유지)")
     audiobookshelf_port: int = Field(default=13378, description="Audiobookshelf 호스트 포트 (기존 13378 유지)")
@@ -26,10 +29,10 @@ class EbookStackConfigRequest(BaseModel):
     suwayomi_port: int = Field(default=4567, description="Suwayomi (Tachidesk) 호스트 포트")
     readarr_port: int = Field(default=8787, description="Readarr 호스트 포트")
     stirling_port: int = Field(default=8087, description="Stirling-PDF 호스트 포트")
-    flaresolverr_port: int = Field(default=8191, description="FlareSolverr 호스트 포트")
-    komga_user: str = Field(default="fauna035@gmail.com", description="Komga 관리자 이메일")
+    flaresolverr_port: int = Field(default=8192, description="FlareSolverr 호스트 포트 (mediarr 8191과 충돌 방지)")
+    komga_user: str = Field(default="admin@example.com", description="Komga 관리자 이메일")
     komga_password: str = Field(default="YOUR_KOMGA_PASSWORD", description="Komga 관리자 비밀번호")
-    kavita_api_key: str = Field(default="JR5SNjbYayxiZtzTgEIWOTfZ6Od3iyTa", description="Kavita OPDS/API 키")
+    kavita_api_key: str = Field(default="CHANGE_ME_KAVITA_API_KEY", description="Kavita OPDS/API 키")
     selected_services: List[str] = Field(
         default_factory=lambda: [
             "ebook-control-center",
@@ -62,13 +65,14 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
 
     lines: List[str] = [
         "# =============================================================================",
-        "# 📚 ULTIMATE SYNOLOGY EBOOK, MANGA, WEBTOON & AUDIOBOOK STACK (ebook-stack)",
+        "# 📚 ULTIMATE SYNOLOGY EBOOK, MANGA, WEBTOON & AUDIOBOOK STACK (ebook-stack v1.3.0)",
         "# =============================================================================",
         "# • 프로젝트명   : ebook-stack (단일 프로젝트 & 단일 docker-compose.yml 통합 아키텍처)",
-        "# • 통합 이미지  : kimmingil/ebook-stack:latest (자동 초기화 · 실시간 관제 · DB 최적화 내장)",
+        "# • 통합 이미지  : kimmingil/ebook-stack:latest (폴더/권한 자동 초기화 · REST API 자동 배선 · 24h DB 닥터)",
         f"# • 시놀로지 권한: PUID={cfg.puid} / PGID={cfg.pgid} / TZ={cfg.tz}",
         f"# • 설정 경로    : {docker_root}/<서비스명> (순수 Config & DB 전용 완벽 분리)",
-        f"# • 마스터 서재  : {data_root}:/data:rw (전 컨테이너 단일 볼륨 유기적 공유 & 하드링크 지원)",
+        f"# • 마스터 서재  : {data_root}:/ebooks:rw & /volume1/mediarr:/data:rw (Mediarr-Stack 0.1초 하드링크 연동)",
+        "# • 기존 호환성  : 기존 Komga(/data), Kavita(/manga), ABS(/audiobooks), Calibre 서재 100% 무손실 승계",
         "# =============================================================================",
         "",
         'version: "3.9"',
@@ -93,7 +97,7 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
     if "ebook-control-center" in selected:
         lines.extend([
             "  # ---------------------------------------------------------------------------",
-            "  # 🎛️ 0. EBOOK CONTROL CENTER - 통합 관제 · 폴더/설정 자동 초기화 · DB 최적화 엔진",
+            "  # 🎛️ 0. EBOOK CONTROL CENTER - 폴더/권한(1026:100) 초기화 · Zero-Touch API 배선 · 24h DB 닥터",
             "  # ---------------------------------------------------------------------------",
             "  ebook-control-center:",
             "    image: kimmingil/ebook-stack:latest",
@@ -104,6 +108,8 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             "        aliases:",
             "          - ebook-control-center",
             "          - ebook-stack",
+            "    extra_hosts:",
+            '      - "host.docker.internal:host-gateway"',
             "    labels:",
             '      com.centurylinklabs.watchtower.enable: "true"',
             "    security_opt:",
@@ -113,13 +119,17 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             f"      PUID: ${{PUID:-{cfg.puid}}}",
             f"      PGID: ${{PGID:-{cfg.pgid}}}",
             "      PORT: 8500",
-            "      AUTO_BOOTSTRAP: \"true\"",
-            "      AUTO_DAILY_MAINTENANCE: \"true\"",
+            '      AUTO_BOOTSTRAP: "true"',
+            '      AUTO_DAILY_MAINTENANCE: "true"',
+            '      AUTO_MAINTENANCE_INTERVAL_HOURS: "24"',
             "      HOST_DOCKER_MOUNT: /host-docker",
             "      HOST_DATA_MOUNT: /host-data",
-            "      KOMGA_USER: ${KOMGA_USER:-fauna035@gmail.com}",
+            f"      NAS_IP: ${{NAS_IP:-{cfg.nas_ip}}}",
+            f"      KOMGA_USER: ${{KOMGA_USER:-{cfg.komga_user}}}",
             "      KOMGA_PASSWORD: ${KOMGA_PASSWORD:-}",
             "      KAVITA_API_KEY: ${KAVITA_API_KEY:-}",
+            "      CONTROL_CENTER_USER: ${CONTROL_CENTER_USER:-admin}",
+            "      CONTROL_CENTER_PASSWORD: ${CONTROL_CENTER_PASSWORD:-}",
             "    ports:",
             f'      - "{cfg.control_port}:8500"',
             "    volumes:",
@@ -149,15 +159,19 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
         cname = _cname(cfg, "komga")
         komga_vols = [
             f"      - {docker_root}/komga/config:/config:rw",
-            f"      - {data_root}:/data:rw",
-            f"      - {data_root}/calibre-library:/calibre-library:rw",
         ]
         if cfg.keep_legacy_mounts:
-            komga_vols.append(f"      - {docker_root}/komga/data:/legacy-komga-data:rw")
+            komga_vols.append(f"      - {docker_root}/komga/data:/data:rw")
+        else:
+            komga_vols.append(f"      - {data_root}:/data:rw")
+        komga_vols.extend([
+            f"      - {data_root}:/ebooks:rw",
+            f"      - {data_root}/calibre-library:/calibre-library:rw",
+        ])
 
         lines.extend([
             "  # ---------------------------------------------------------------------------",
-            "  # 📚 1. KOMGA - 만화·웹툰·매거진 메인 미디어 서버 (G1GC 메모리 최적화)",
+            "  # 📚 1. KOMGA - 만화·웹툰·매거진 메인 미디어 서버 (기존 /data 서재 100% 보존 + G1GC 최적화)",
             "  # ---------------------------------------------------------------------------",
             "  komga:",
             "    image: gotson/komga:latest",
@@ -200,18 +214,22 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
         cname = _cname(cfg, "kavita")
         kavita_vols = [
             f"      - {docker_root}/kavita/config:/kavita/config:rw",
+        ]
+        if cfg.keep_legacy_mounts:
+            kavita_vols.append(f"      - {docker_root}/kavita/data:/manga:rw")
+        else:
+            kavita_vols.append(f"      - {data_root}/manga:/manga:rw")
+        kavita_vols.extend([
+            f"      - {data_root}:/ebooks:rw",
             f"      - {data_root}:/data:rw",
-            f"      - {data_root}/manga:/manga:rw",
             f"      - {data_root}/lightnovels:/lightnovels:rw",
             f"      - {data_root}/books:/books:rw",
             f"      - {data_root}/calibre-library:/calibre-library:rw",
-        ]
-        if cfg.keep_legacy_mounts:
-            kavita_vols.append(f"      - {docker_root}/kavita/data:/legacy-kavita-manga:rw")
+        ])
 
         lines.extend([
             "  # ---------------------------------------------------------------------------",
-            "  # 🌟 2. KAVITA - 라이트노벨(EPUB)·소설·만화 초고속 하이브리드 서버",
+            "  # 🌟 2. KAVITA - 라이트노벨(EPUB)·소설·만화 초고속 하이브리드 서버 (기존 /manga 서재 보존)",
             "  # ---------------------------------------------------------------------------",
             "  kavita:",
             "    image: jvmilazz0/kavita:latest",
@@ -253,21 +271,25 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
     if "audiobookshelf" in selected:
         cname = _cname(cfg, "audiobookshelf")
         abs_vols = [
-            f"      # ✅ [핵심 수정 완료] 기존 상위 폴더(/volume1/docker/audiobookshelf) 중첩 마운트 버그를 /config 하위 분리로 해결",
+            f"      # ✅ [핵심 수정 완료] 기존 상위 폴더({docker_root}/audiobookshelf) 중첩 마운트 버그를 /config 하위 분리로 해결",
             f"      - {docker_root}/audiobookshelf/config:/config:rw",
             f"      - {docker_root}/audiobookshelf/metadata:/metadata:rw",
-            f"      - {data_root}/audiobooks:/audiobooks:rw",
+        ]
+        if cfg.keep_legacy_mounts:
+            abs_vols.append(f"      - {docker_root}/audiobookshelf/audiobooks:/audiobooks:rw")
+        else:
+            abs_vols.append(f"      - {data_root}/audiobooks:/audiobooks:rw")
+        abs_vols.extend([
+            f"      - {data_root}:/ebooks:rw",
             f"      - {data_root}/podcasts:/podcasts:rw",
             f"      - {data_root}/books:/books:rw",
             f"      - {data_root}/lightnovels:/lightnovels:rw",
             f"      - {data_root}/calibre-library:/calibre-library:rw",
-        ]
-        if cfg.keep_legacy_mounts:
-            abs_vols.append(f"      - {docker_root}/audiobookshelf/audiobooks:/legacy-audiobooks:rw")
+        ])
 
         lines.extend([
             "  # ---------------------------------------------------------------------------",
-            "  # 🎧 3. AUDIOBOOKSHELF - 오디오북·팟캐스트·전자책 스트리밍 서버",
+            "  # 🎧 3. AUDIOBOOKSHELF - 오디오북·팟캐스트·전자책 스트리밍 서버 (기존 /audiobooks 서재 보존)",
             "  # ---------------------------------------------------------------------------",
             "  audiobookshelf:",
             "    image: advplyr/audiobookshelf:latest",
@@ -289,14 +311,15 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             f"      TZ: ${{TZ:-{cfg.tz}}}",
             "      CONFIG_PATH: /config",
             "      METADATA_PATH: /metadata",
-            "      PORT: 80",
+            "      PORT: 13378",
+            "      JWT_SECRET_KEY: ${ABS_JWT_SECRET:-CHANGE_ME_ABS_JWT_SECRET_KEY}",
             "    ports:",
-            f'      - "{cfg.audiobookshelf_port}:80"',
+            f'      - "{cfg.audiobookshelf_port}:13378"',
             "    volumes:",
             *abs_vols,
             *ctrl_dep,
             "    healthcheck:",
-            '      test: ["CMD-SHELL", "nc -z 127.0.0.1 80 >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:80/ping >/dev/null 2>&1 || exit 1"]',
+            '      test: ["CMD-SHELL", "nc -z 127.0.0.1 13378 >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:13378/ping >/dev/null 2>&1 || exit 1"]',
             "      interval: 20s",
             "      timeout: 5s",
             "      retries: 3",
@@ -400,6 +423,7 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             f"      TZ: ${{TZ:-{cfg.tz}}}",
             f"      PUID: ${{PUID:-{cfg.puid}}}",
             f"      PGID: ${{PGID:-{cfg.pgid}}}",
+            '      NETWORK_SHARE_MODE: "true"',
             "      HARDCOVER_TOKEN: ${HARDCOVER_TOKEN:-}",
             "    ports:",
             f'      - "{cfg.cwa_port}:8083"',
@@ -413,8 +437,8 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             '      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8083 >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:8083 >/dev/null 2>&1 || bash -c \'</dev/tcp/127.0.0.1/8083\' >/dev/null 2>&1 || exit 1"]',
             "      interval: 30s",
             "      timeout: 10s",
-            "      retries: 3",
-            "      start_period: 60s",
+            "      retries: 5",
+            "      start_period: 120s",
             "    restart: on-failure:5",
             "    logging: *default-logging",
             "",
@@ -449,7 +473,7 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             "      FLASK_PORT: 8084",
             "      INGEST_DIR: /cwa-book-ingest",
             "      BOOK_LANGUAGE: ko,en,ja",
-            "      USE_CF_BYPASS: \"true\"",
+            '      USE_CF_BYPASS: "true"',
             "      FLARESOLVERR_URL: http://flaresolverr:8191",
             "    ports:",
             f'      - "{cfg.cwa_dl_port}:8084"',
@@ -497,8 +521,8 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             f"      TZ: ${{TZ:-{cfg.tz}}}",
             "      BIND_IP: 0.0.0.0",
             "      BIND_PORT: 4567",
-            "      DOWNLOAD_AS_CBZ: \"true\"",
-            "      FLARESOLVERR_ENABLED: \"true\"",
+            '      DOWNLOAD_AS_CBZ: "true"',
+            '      FLARESOLVERR_ENABLED: "true"',
             "      FLARESOLVERR_URL: http://flaresolverr:8191",
             '      JAVA_TOOL_OPTIONS: "-Xmx1536m -Dsuwayomi.tachidesk.config.server.ip=0.0.0.0 -Dsuwayomi.tachidesk.config.server.port=4567 -Dsuwayomi.tachidesk.config.server.downloadsPath=/data/manga -Dsuwayomi.tachidesk.config.server.downloadAsCbz=true -Dsuwayomi.tachidesk.config.server.autoDownloadNewChapters=true -Dsuwayomi.tachidesk.config.server.flareSolverrEnabled=true -Dsuwayomi.tachidesk.config.server.flareSolverrUrl=http://flaresolverr:8191"',
             "    ports:",
@@ -506,6 +530,7 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             "    volumes:",
             f"      - {docker_root}/suwayomi:/home/suwayomi/.local/share/Tachidesk:rw",
             f"      - {data_root}/manga:/home/suwayomi/.local/share/Tachidesk/downloads:rw",
+            f"      - {data_root}:/ebooks:rw",
             f"      - {data_root}:/data:rw",
             *ctrl_dep,
             "    healthcheck:",
@@ -524,10 +549,10 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
         cname = _cname(cfg, "readarr")
         lines.extend([
             "  # ---------------------------------------------------------------------------",
-            "  # 📡 8. READARR - Prowlarr·qBittorrent 연동 신간 전자책·오디오북 자동 수집",
+            "  # 📡 8. READARR - Mediarr Prowlarr·qBittorrent 연동 신간 전자책·오디오북 자동 수집",
             "  # ---------------------------------------------------------------------------",
             "  readarr:",
-            "    image: lscr.io/linuxserver/readarr:nightly",
+            "    image: lscr.io/linuxserver/readarr:0.4.18-develop",
             f"    container_name: {cname}",
             "    hostname: readarr",
             "    networks:",
@@ -535,6 +560,8 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             "        aliases:",
             "          - readarr",
             f"          - {cname}",
+            "    extra_hosts:",
+            '      - "host.docker.internal:host-gateway"',
             "    labels:",
             '      com.centurylinklabs.watchtower.enable: "true"',
             "    mem_limit: 1g",
@@ -549,7 +576,7 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             "    volumes:",
             f"      - {docker_root}/readarr:/config:rw",
             f"      - {data_root}:/ebooks:rw",
-            "      - /volume1/data:/data:rw",
+            "      - /volume1/mediarr:/data:rw",
             *ctrl_dep,
             "    healthcheck:",
             '      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8787/ping >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:8787/ping >/dev/null 2>&1 || exit 1"]',
@@ -587,8 +614,8 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             f"      TZ: ${{TZ:-{cfg.tz}}}",
             f"      PUID: ${{PUID:-{cfg.puid}}}",
             f"      PGID: ${{PGID:-{cfg.pgid}}}",
-            "      DOCKER_ENABLE_SECURITY: \"false\"",
-            "      INSTALL_BOOK_AND_ADVANCED_HTML_OPS: \"true\"",
+            '      DOCKER_ENABLE_SECURITY: "false"',
+            '      INSTALL_BOOK_AND_ADVANCED_HTML_OPS: "true"',
             "      LANGS: ko_KR",
             "    ports:",
             f'      - "{cfg.stirling_port}:8080"',
@@ -613,7 +640,7 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
         cname = _cname(cfg, "flaresolverr")
         lines.extend([
             "  # ---------------------------------------------------------------------------",
-            "  # 🛡️ 10. FLARESOLVERR - Suwayomi·CWA·Readarr용 Cloudflare 자동 우회 프록시",
+            "  # 🛡️ 10. FLARESOLVERR - Suwayomi·CWA용 Cloudflare 자동 우회 프록시 (호스트 :8192 / 내부 :8191)",
             "  # ---------------------------------------------------------------------------",
             "  flaresolverr:",
             "    image: ghcr.io/flaresolverr/flaresolverr:latest",
@@ -637,7 +664,7 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             f'      - "{cfg.flaresolverr_port}:8191"',
             *ctrl_dep,
             "    healthcheck:",
-            '      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8191/health >/dev/null 2>&1 || wget -q --spider http://127.0.0.1:8191/health >/dev/null 2>&1 || exit 1"]',
+            '      test: ["CMD-SHELL", "python3 -c \'import urllib.request; urllib.request.urlopen(\\"http://127.0.0.1:8191/health\\")\' >/dev/null 2>&1 || curl -fsS http://127.0.0.1:8191/health >/dev/null 2>&1 || exit 1"]',
             "      interval: 30s",
             "      timeout: 10s",
             "      retries: 3",
@@ -798,7 +825,7 @@ if [ -f "{docker_root}/audiobookshelf/absdatabase.sqlite" ] && [ ! -f "{docker_r
   [ -d "{docker_root}/audiobookshelf/migrations" ] && cp -rn "{docker_root}/audiobookshelf/migrations" "{docker_root}/audiobookshelf/config/" 2>/dev/null || true
 fi
 
-echo '[3/5] 통합 마스터 eBook 서재 폴더 구조({data_root}) 생성 중...'
+echo '[3/5] 통합 마스터 eBook 서재 폴더 구조({data_root}) 및 기존 캘리버 서재 이관 점검 중...'
 mkdir -p "{data_root}/manga"
 mkdir -p "{data_root}/webtoon"
 mkdir -p "{data_root}/comics"
@@ -809,6 +836,9 @@ mkdir -p "{data_root}/podcasts"
 mkdir -p "{data_root}/magazines"
 mkdir -p "{data_root}/cwa-ingest"
 mkdir -p "{data_root}/calibre-library"
+if [ -f "{docker_root}/calibre/캘리버 서재/metadata.db" ] && [ ! -f "{data_root}/calibre-library/metadata.db" ]; then
+  cp -rn "{docker_root}/calibre/캘리버 서재/"* "{data_root}/calibre-library/" 2>/dev/null || true
+fi
 
 echo '[4/5] Komf 한국어·글로벌 메타데이터 설정 파일(application.yml) 준비 중...'
 if [ ! -f "{docker_root}/komf/config/application.yml" ]; then
@@ -835,11 +865,9 @@ def generate_maintenance_doctor_script(cfg: EbookStackConfigRequest) -> str:
 # =============================================================================
 # 🩺 EBOOK STACK DOCTOR - 백업 우선 안전 자동 업데이트 · SQLite 최적화 · 자가치유 스크립트
 # =============================================================================
-# • Watchtower처럼 백업 없이 무작정 컨테이너를 덮어쓰지 않고,
-#   반드시 [1. DB 스냅샷 백업] ➔ [2. 각 공식 제작자 최신 이미지 Pull & 무중단 교체] ➔
-#   [3. SQLite VACUUM 속도 최적화] ➔ [4. 구버전 잉여 이미지 청소] 순서로 안전하게 관리합니다.
-# • 시놀로지 제어판 -> 작업 스케줄러(root)에 매주 일요일 새벽 04:00 실행으로 등록해 두시면
-#   11개 모든 이미지가 데이터 손실 위험 0%로 영구 자동 업데이트됩니다.
+# • Watchtower 라벨 연동과 더불어, 언제든 수동 또는 스케줄러로 실행 시
+#   [1. DB 스냅샷 백업] ➔ [2. 각 공식 제작자 최신 이미지 Pull & 무중단 교체] ➔
+#   [3. SQLite WAL & VACUUM 속도 최적화] ➔ [4. 구버전 잉여 이미지 청소]를 수행합니다.
 # =============================================================================
 set -e
 
@@ -872,26 +900,10 @@ if [ -f "{stack_dir}/docker-compose.yml" ]; then
 elif [ -f "./docker-compose.yml" ]; then
   docker compose pull
   docker compose up -d --remove-orphans
-else
-  # 개별 실행 중인 컨테이너의 최신 이미지 자동 Pull
-  for img in \\
-    "kimmingil/ebook-stack:latest" \\
-    "gotson/komga:latest" \\
-    "jvmilazz0/kavita:latest" \\
-    "advplyr/audiobookshelf:latest" \\
-    "sndxr/komf:latest" \\
-    "crocodilestick/calibre-web-automated:latest" \\
-    "ghcr.io/calibrain/calibre-web-automated-book-downloader:latest" \\
-    "ghcr.io/suwayomi/tachidesk:latest" \\
-    "lscr.io/linuxserver/readarr:nightly" \\
-    "frooodle/s-pdf:latest" \\
-    "ghcr.io/flaresolverr/flaresolverr:latest"; do
-    docker pull "$img" 2>/dev/null || true
-  done
 fi
 
 echo "=================================================================="
-echo "⚡ [3/5] SQLite 데이터베이스 조각 모음(VACUUM & ANALYZE) 속도 최적화"
+echo "⚡ [3/5] SQLite 데이터베이스 조각 모음(WAL Checkpoint & VACUUM) 속도 최적화"
 echo "=================================================================="
 if command -v sqlite3 >/dev/null 2>&1; then
   for db_file in \\
@@ -902,7 +914,7 @@ if command -v sqlite3 >/dev/null 2>&1; then
     "{data_root}/calibre-library/metadata.db"; do
     if [ -f "$db_file" ]; then
       echo "  -> SQLite 최적화 수행 중: $db_file"
-      sqlite3 "$db_file" "PRAGMA optimize; VACUUM; ANALYZE;" 2>/dev/null || true
+      sqlite3 "$db_file" "PRAGMA journal_mode=WAL; PRAGMA wal_checkpoint(TRUNCATE); PRAGMA optimize; VACUUM; ANALYZE;" 2>/dev/null || true
     fi
   done
 fi
@@ -924,9 +936,9 @@ echo "✅ [완료] 백업 ➔ 최신 이미지 안전 업데이트 ➔ DB 최적
 
 
 def generate_env_template(cfg: EbookStackConfigRequest) -> str:
-    """Generate the .env template preserving existing user variables."""
+    """Generate the .env.example template (zero personal credentials hardcoded)."""
     return f"""# =============================================================================
-# 🔐 EBOOK STACK (.env 환경변수 설정 파일)
+# 🔐 EBOOK STACK (.env 환경변수 설정 파일 예시)
 # =============================================================================
 # ⚠️ 주의: 실제 비밀번호와 API 키가 들어있는 로컬 .env 파일은 .gitignore로 보호됩니다.
 
@@ -934,17 +946,26 @@ def generate_env_template(cfg: EbookStackConfigRequest) -> str:
 TZ={cfg.tz}
 PUID={cfg.puid}
 PGID={cfg.pgid}
+NAS_IP={cfg.nas_ip}
 
-# 📚 2. Komga 및 Komf 연동 인증 정보
-KOMGA_USER={cfg.komga_user}
-KOMGA_PASSWORD={cfg.komga_password}
+# 📂 2. 도커 및 마스터 서재 경로
+DOCKER_ROOT={cfg.docker_root}
+EBOOK_DATA_ROOT={cfg.ebook_data_root}
 
-# 🌟 3. Kavita 및 Audiobookshelf 인증 정보
-KAVITA_API_KEY={cfg.kavita_api_key}
-ABS_JWT_SECRET=RDoDIYpPuEsMOQHCqjruMxlqAxDEDkZlRfGRLkxDGVGUtruyIYxJlItRSKtxWtxf
+# 📚 3. Komga 및 Komf 연동 인증 정보
+KOMGA_USER=your_email@example.com
+KOMGA_PASSWORD=YOUR_KOMGA_PASSWORD
 
-# 📖 4. Calibre-Web-Automated 선택 옵션 (Hardcover.app API 토큰 등)
+# 🌟 4. Kavita 및 Audiobookshelf 인증 정보
+KAVITA_API_KEY=YOUR_KAVITA_OPDS_API_KEY
+ABS_JWT_SECRET=CHANGE_ME_TO_A_RANDOM_64_CHAR_SECRET
+
+# 📖 5. Calibre-Web-Automated 선택 옵션 (Hardcover.app API 토큰 등)
 HARDCOVER_TOKEN=
+
+# 🛡️ 6. eBook Control Center 웹 대시보드 보호 계정 (선택)
+CONTROL_CENTER_USER=admin
+CONTROL_CENTER_PASSWORD=
 """
 
 
@@ -952,31 +973,30 @@ def generate_wiring_and_opds_guide(cfg: EbookStackConfigRequest) -> List[Dict[st
     """Generate internal Docker wiring addresses and external OPDS/App URLs."""
     return [
         {
-            "step": "1단계: Komf ↔ Komga & Kavita 메타데이터 엔진 자동 연결",
-            "target": f"http://{cfg.nas_ip}:{cfg.komf_port} (Komf 설정)",
-            "internal_address": "Komga: http://komga:25600 | Kavita: http://kavita:5000",
+            "step": "1단계: Zero-Touch Auto-Wirer 자동 배선 (Komga · Kavita · ABS · CWA · Readarr)",
+            "target": f"http://{cfg.nas_ip}:{cfg.control_port} (eBook Control Center)",
+            "internal_address": "Komga: http://komga:25600 | Kavita: http://kavita:5000 | ABS: http://audiobookshelf:80",
             "details": (
-                "이미 환경변수와 application.yml에 내부 도커 주소(http://komga:25600, http://kavita:5000)가 사전 입력되어 있습니다. "
-                "브라우저에 Tampermonkey 확장 설치 후 Komf 유저스크립트를 추가하면 Komga/Kavita 웹 화면 상단에 [Komf Identify] 버튼이 생깁니다."
+                "ebook-control-center(:8586)가 부팅 즉시 기존 서재(/data, /manga, /audiobooks, 캘리버 서재)를 보존하면서 "
+                "신규 통합 서재(/ebooks/*, /calibre-library)를 각 서버의 REST API로 자동 등록합니다."
             ),
         },
         {
-            "step": "2단계: CWA Book Downloader → Calibre-Web-Automated → Kavita/ABS 원클릭 파이프라인",
-            "target": f"http://{cfg.nas_ip}:{cfg.cwa_dl_port} → http://{cfg.nas_ip}:{cfg.cwa_port} → Kavita & ABS",
+            "step": "2단계: CWA Book Downloader → Calibre-Web-Automated → Kavita/ABS/Komga 원클릭 파이프라인",
+            "target": f"http://{cfg.nas_ip}:{cfg.cwa_dl_port} → http://{cfg.nas_ip}:{cfg.cwa_port} → 전 뷰어 동시 반영",
             "internal_address": "인제스트: /cwa-book-ingest ➔ 변환 후 저장: /calibre-library (전 컨테이너 동시 공유)",
             "details": (
                 "CWA Book Downloader(:8084)에서 원하는 책을 검색해 [Download]를 누르면 /cwa-book-ingest 로 내려받아지고, "
-                "Calibre-Web-Automated(:8083)가 5초 내로 감지해 EPUB 자동 변환 후 /calibre-library 에 정식 등록합니다. "
-                "Kavita와 Audiobookshelf도 /calibre-library 를 동시에 마운트하고 있어 모든 앱에서 즉시 열람됩니다."
+                "Calibre-Web-Automated(:8083)가 5초 내로 감지해 EPUB 자동 변환 후 /calibre-library 에 정식 등록합니다."
             ),
         },
         {
-            "step": "3단계: Suwayomi (웹툰·만화 자동 수집) → Komga & Kavita 실시간 연동",
+            "step": "3단계: Suwayomi (Keiyoushi 웹툰·만화 확장 내장) → Komga & Kavita 실시간 연동",
             "target": f"http://{cfg.nas_ip}:{cfg.suwayomi_port}",
-            "internal_address": "FlareSolverr: http://flaresolverr:8191 | CBZ 자동 저장 경로: /data/manga",
+            "internal_address": "FlareSolverr: http://flaresolverr:8191 | CBZ 자동 저장 경로: /ebooks/manga",
             "details": (
-                "Suwayomi(:4567) 컨테이너에 JVM 옵션으로 CBZ 압축 저장 및 FlareSolverr 연동이 이미 강제 주입되어 있습니다. "
-                "작품을 서재에 담으면 새 회차가 올라올 때마다 .cbz 파일로 /data/manga 에 자동 저장되며, Komga(:8341)와 Kavita(:5471)에 즉시 반영됩니다."
+                "Suwayomi(:4567)에 Keiyoushi 공식 만화·웹툰 확장 리포지토리와 CBZ 자동 압축 설정이 이미 주입되어 있습니다. "
+                "원하는 웹툰/만화 소스를 설치해 작품을 담으면 새 회차가 .cbz로 /ebooks/manga 에 저장되어 Komga·Kavita에 즉시 뜹니다."
             ),
         },
         {
@@ -988,8 +1008,8 @@ def generate_wiring_and_opds_guide(cfg: EbookStackConfigRequest) -> List[Dict[st
                 f"CWA OPDS: http://{cfg.nas_ip}:{cfg.cwa_port}/opds"
             ),
             "details": (
-                "아이패드 Panels, 안드로이드 Mihon, 이북리더기 KOReader 앱에 위 OPDS 주소를 등록하면 "
-                "언제 어디서나 스트리밍 열람 및 다운로드가 가능합니다."
+                "아이패드 Panels, 안드로이드 Mihon, 아이폰 Plappa(CarPlay), 이북리더기 KOReader 앱에 위 주소를 등록하면 "
+                "언제 어디서나 스트리밍 열람 및 오프라인 다운로드가 가능합니다."
             ),
         },
     ]

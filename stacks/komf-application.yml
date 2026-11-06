@@ -6,7 +6,7 @@
 
 komga:
   baseUri: "http://komga:25600"
-  komgaUser: "fauna035@gmail.com"
+  komgaUser: "admin@example.com"
   komgaPassword: "YOUR_KOMGA_PASSWORD"
   eventListener:
     enabled: true
@@ -39,7 +39,7 @@ komga:
 
 kavita:
   baseUri: "http://kavita:5000"
-  apiKey: "JR5SNjbYayxiZtzTgEIWOTfZ6Od3iyTa"
+  apiKey: "CHANGE_ME_KAVITA_API_KEY"
   eventListener:
     enabled: true
     metadataLibraryFilter: []

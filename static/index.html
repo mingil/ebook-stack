@@ -89,10 +89,13 @@
         </div>
         <div class="flex flex-wrap gap-2 shrink-0">
           <button onclick="runRuntimeBootstrap()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition">
-            <i class="fa-solid fa-folder-plus mr-1"></i>폴더·DB분리 즉시 실행
+            <i class="fa-solid fa-folder-plus mr-1"></i>폴더·DB분리·이관 즉시 실행
+          </button>
+          <button onclick="runRuntimeAutoWire()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white transition">
+            <i class="fa-solid fa-plug-circle-check mr-1"></i>REST API 서재 자동 배선 실행
           </button>
           <button onclick="runRuntimeMaintenance()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition">
-            <i class="fa-solid fa-database mr-1"></i>SQLite VACUUM 최적화 &amp; 백업 실행
+            <i class="fa-solid fa-database mr-1"></i>SQLite WAL 최적화 &amp; 백업 실행
           </button>
         </div>
       </div>
@@ -144,7 +147,7 @@
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="block text-xs font-semibold text-slate-300 mb-1">시놀로지 NAS IP</label>
-              <input id="cfgNasIp" type="text" value="192.168.1.100" onchange="triggerGenerate()" class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white focus:border-indigo-500 focus:outline-none" />
+              <input id="cfgNasIp" type="text" value="192.168.0.100" onchange="triggerGenerate()" class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white focus:border-indigo-500 focus:outline-none" />
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-300 mb-1">컨테이너 이름 프리픽스</label>
@@ -159,7 +162,7 @@
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-300 mb-1">통합 서재 루트 (Master Data)</label>
-              <input id="cfgDataRoot" type="text" value="/volume1/data/ebooks" onchange="triggerGenerate()" class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white focus:border-indigo-500 focus:outline-none" />
+              <input id="cfgDataRoot" type="text" value="/volume1/mediarr/ebooks" onchange="triggerGenerate()" class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white focus:border-indigo-500 focus:outline-none" />
             </div>
           </div>
 
@@ -324,10 +327,20 @@
     async function runRuntimeBootstrap() {
       const banner = document.getElementById('runtimeActionBanner');
       banner.classList.remove('hidden');
-      banner.textContent = '폴더 생성, Audiobookshelf DB 무손실 분리, Komf 설정 자동 프로비저닝 실행 중...';
+      banner.textContent = '폴더 생성, Audiobookshelf DB 분리, Calibre 서재 이관, Komf/Suwayomi 설정 프로비저닝 실행 중...';
       const res = await fetch('/api/runtime/bootstrap', { method: 'POST' });
       const data = await res.json();
       banner.innerHTML = `<strong>[자동 프로비저닝 결과]</strong> ${data.message} ${data.actions && data.actions.length ? '(' + data.actions.join(' / ') + ')' : ''}`;
+    }
+
+    async function runRuntimeAutoWire() {
+      const banner = document.getElementById('runtimeActionBanner');
+      banner.classList.remove('hidden');
+      banner.textContent = 'Komga · Kavita · Audiobookshelf · CWA · Suwayomi · Readarr · Prowlarr REST API 자동 배선 중...';
+      const res = await fetch('/api/runtime/autowire', { method: 'POST' });
+      const data = await res.json();
+      const logs = (data.wired_actions || []).join(' / ');
+      banner.innerHTML = `<strong>[REST API 서재 자동 배선 완료]</strong> ${logs || '모든 서재 및 API가 최신 상태로 연결되어 있습니다.'}`;
     }
 
     async function runRuntimeMaintenance() {
@@ -439,12 +452,12 @@
 
     function collectConfigPayload() {
       return {
-        nas_ip: document.getElementById('cfgNasIp').value.trim() || '192.168.1.100',
+        nas_ip: document.getElementById('cfgNasIp').value.trim() || '192.168.0.100',
         puid: 1026,
         pgid: 100,
         tz: 'Asia/Seoul',
         docker_root: document.getElementById('cfgDockerRoot').value.trim() || '/volume1/docker',
-        ebook_data_root: document.getElementById('cfgDataRoot').value.trim() || '/volume1/data/ebooks',
+        ebook_data_root: document.getElementById('cfgDataRoot').value.trim() || '/volume1/mediarr/ebooks',
         container_prefix: document.getElementById('cfgPrefix').value,
         keep_legacy_mounts: document.getElementById('cfgKeepLegacy').checked,
         komga_port: parseInt(document.getElementById('cfgKomgaPort').value || '8341', 10),

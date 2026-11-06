@@ -1,19 +1,43 @@
-"""Ultimate eBook, Manga, Webtoon & Audiobook Stack Catalog, Organic Pipelines & Root-Cause Diagnosis."""
+"""Ultimate eBook, Manga, Webtoon & Audiobook Stack Catalog, Organic Pipelines & Root-Cause Diagnosis (v1.3.0)."""
 
 from typing import Any, Dict, List
 
 DIAGNOSIS_REPORT: List[Dict[str, Any]] = [
     {
+        "id": "legacy-db-mount-preservation",
+        "severity": "CRITICAL",
+        "severity_label": "기존 서재 DB 100% 무손실 보존",
+        "service": "Komga · Kavita · Audiobookshelf · Calibre",
+        "title": "기존 SQLite DB에 등록된 서재 경로(/data, /manga, /audiobooks) 및 '캘리버 서재' 100% 무손실 승계",
+        "cause": (
+            "실제 운영 중인 SQLite DB를 전수 분석한 결과, Komga는 `file:/data/`, Kavita는 `/manga`, Audiobookshelf는 `/audiobooks`를 "
+            "기존 서재 루트로 참조하고 있었습니다. 만약 이 마운트 경로를 임의로 변경하면 기존에 등록된 수백 권의 만화·소설(`호빗`, `삼체`, `토지`, `듄`, `해리포터` 등)과 "
+            "독서 진행률이 '파일 없음(Unavailable)' 상태가 됩니다."
+        ),
+        "before_snippet": (
+            "# 기존 서재 경로를 바꾸면 DB 내 책 목록이 깨짐\n"
+            "# 또한 /volume1/docker/calibre/캘리버 서재가 분리되어 있었음"
+        ),
+        "after_snippet": (
+            "# 1) 기존 마운트(/data, /manga, /audiobooks) 100% 원형 유지!\n"
+            "# 2) 신규 통합 마운트(/ebooks, /calibre-library) 추가 및 REST API 자동 등록!\n"
+            "# 3) 기존 '캘리버 서재'(metadata.db)를 /calibre-library 로 자동 무손실 복제!"
+        ),
+        "solution": (
+            "기존 컨테이너 내부 경로(`/data`, `/manga`, `/audiobooks`)를 100% 그대로 유지해 기존 서재를 완벽히 보호하면서, "
+            "`ebook-control-center`의 `auto_wirer.py`가 REST API로 신규 통합 서재(`/ebooks/*`, `/calibre-library`)를 자동 추가합니다."
+        ),
+    },
+    {
         "id": "abs-nested-volume",
         "severity": "CRITICAL",
-        "severity_label": "치명적 구조 결함 해결",
+        "severity_label": "치명적 중첩 마운트 해결",
         "service": "Audiobookshelf",
-        "title": "Audiobookshelf 중첩(Nested) 볼륨 마운트로 인한 백업 폭발 및 DB 손상 위험",
+        "title": "Audiobookshelf 중첩(Nested) 볼륨 마운트로 인한 백업 폭발 및 DB 손상 위험 완치",
         "cause": (
             "기존 compose.yaml에서 상위 폴더 자체인 `/volume1/docker/audiobookshelf:/config:rw`를 마운트하면서, "
             "동시에 그 하위 폴더인 `/volume1/docker/audiobookshelf/audiobooks`와 `/metadata`를 중복 마운트했습니다. "
-            "이로 인해 Audiobookshelf가 `/config` 폴더를 스캔하거나 자동 백업할 때 수십~수백 GB의 오디오북과 메타데이터까지 "
-            "설정 파일로 오인하여 디스크 I/O 병목 및 백업 실패를 유발합니다."
+            "이로 인해 Audiobookshelf가 `/config` 백업 시 수십 GB의 오디오북/전자책까지 설정 파일로 오인하여 디스크 병목을 유발합니다."
         ),
         "before_snippet": (
             "volumes:\n"
@@ -25,26 +49,49 @@ DIAGNOSIS_REPORT: List[Dict[str, Any]] = [
             "volumes:\n"
             "  - /volume1/docker/audiobookshelf/config:/config:rw\n"
             "  - /volume1/docker/audiobookshelf/metadata:/metadata:rw\n"
-            "  - /volume1/data/ebooks/audiobooks:/audiobooks:rw\n"
-            "  - /volume1/data/ebooks/podcasts:/podcasts:rw\n"
-            "  - /volume1/data/ebooks/calibre-library:/calibre-library:rw\n"
-            "  - /volume1/docker/audiobookshelf/audiobooks:/legacy-audiobooks:rw"
+            "  - /volume1/docker/audiobookshelf/audiobooks:/audiobooks:rw\n"
+            "  - /volume1/mediarr/ebooks:/ebooks:rw\n"
+            "  - /volume1/mediarr/ebooks/calibre-library:/calibre-library:rw"
         ),
         "solution": (
-            "`/config` 경로를 `/volume1/docker/audiobookshelf/config`로 완전히 분리하고, 통합 관리 컨테이너(`ebook-control-center`)와 "
-            "초기화 스크립트가 기존 상위 폴더에 있던 `absdatabase.sqlite` 등 DB 파일만 안전하게 `config/` 하위로 자동 무손실 이관합니다."
+            "`/config` 경로를 `/volume1/docker/audiobookshelf/config`로 완전히 분리하고, 통합 관제 센터(`ebook-control-center`)가 "
+            "기존 상위 폴더에 있던 `absdatabase.sqlite`와 `migrations`만 안전하게 `config/` 하위로 무손실 이관합니다."
+        ),
+    },
+    {
+        "id": "mediarr-hardlink-and-port-harmony",
+        "severity": "CRITICAL",
+        "severity_label": "Mediarr-Stack 완벽 공존 & 0.1초 하드링크",
+        "service": "Readarr ↔ Mediarr (Prowlarr · qBittorrent)",
+        "title": "`mediarr-stack`과 포트 충돌 제로화(:8586, :8192) 및 `/volume1/mediarr` 단일 볼륨 0.1초 하드링크 통합",
+        "cause": (
+            "시놀로지 NAS에서 이미 가동 중인 `mediarr-stack`이 `8585`(관제 센터)와 `8191`(FlareSolverr) 포트를 사용 중이며, "
+            "토렌트 다운로더(`qBittorrent`)는 `/volume1/mediarr:/data` 볼륨에서 동작합니다. 도서 스택이 별도 볼륨(`/volume1/data`)이나 "
+            "중복 포트(`8191`)를 쓰면 포트 충돌 에러가 나거나 하드링크가 작동하지 않습니다."
+        ),
+        "before_snippet": (
+            "# 포트 8191 충돌 (mediarr-gluetun 이미 사용 중)\n"
+            "# /volume1/data 미존재로 하드링크 불가"
+        ),
+        "after_snippet": (
+            "ebook-control-center: 8586:8500 (mediarr 8585와 나란히 공존)\n"
+            "ebook-flaresolverr: 8192:8191 (내부망은 flaresolverr:8191 유지)\n"
+            "통합 볼륨: /volume1/mediarr:/data & /volume1/mediarr/ebooks:/ebooks"
+        ),
+        "solution": (
+            "`mediarr-stack`과 동일한 `/volume1/mediarr` 볼륨을 공유하여 qBittorrent가 받은 도서·오디오북 토렌트를 Readarr가 "
+            "0.1초 하드링크(추가 용량 0바이트)로 서재에 즉시 연결하고, Prowlarr(:9696)·qBittorrent(:8181)와 자동 배선됩니다."
         ),
     },
     {
         "id": "kavita-abs-permissions",
-        "severity": "CRITICAL",
+        "severity": "HIGH",
         "severity_label": "시놀로지 권한 충돌 해결",
-        "service": "Kavita & Audiobookshelf",
-        "title": "Kavita 및 Audiobookshelf 미완성 설정 및 시놀로지 PUID(1026)/PGID(100) 권한 누락",
+        "service": "Kavita & Audiobookshelf & CWA",
+        "title": "전 컨테이너 시놀로지 표준 PUID(1026)/PGID(100) 권한 통일 및 자동 자가 치유",
         "cause": (
-            "기존 compose.yaml 주석에 적혀 있듯 Kavita와 Audiobookshelf는 뼈대만 작성된 미완성 상태였으며, "
-            "`user: 1026:100` 또는 `PUID=1026`/`PGID=100` 설정이 빠져 있었습니다. 이 상태로 운영하면 컨테이너가 `root` 권한으로 "
-            "메타데이터·표지·캐시를 생성하여 시놀로지 DSM File Station에서 파일 수정/이동이 거부되거나 서재 스캔 오류가 발생합니다."
+            "기존 compose.yaml에서 Kavita와 Audiobookshelf에 `PUID=1026`/`PGID=100` 설정이 빠져 있어 `root:root` 권한으로 "
+            "DB와 캐시가 생성되었고, DSM File Station이나 타 컨테이너에서 접근할 때 Permission Denied(`EACCES`)를 유발했습니다."
         ),
         "before_snippet": (
             "kavita:\n"
@@ -56,114 +103,66 @@ DIAGNOSIS_REPORT: List[Dict[str, Any]] = [
         "after_snippet": (
             "kavita:\n"
             "  environment:\n"
-            "    TZ: ${TZ}\n"
-            "    PUID: ${PUID}\n"
-            "    PGID: ${PGID}\n"
+            "    PUID: 1026\n"
+            "    PGID: 100\n"
             "audiobookshelf:\n"
-            "  user: \"${PUID}:${PGID}\""
+            "  user: \"1026:100\""
         ),
         "solution": (
-            "모든 컨테이너에 시놀로지 표준 사용자 권한(`PUID=1026`, `PGID=100`)과 `security_opt: no-new-privileges:true`를 "
-            "100% 일관되게 적용했습니다."
+            "11개 전 컨테이너에 `1026:100` 권한을 부여하고, `ebook-control-center`가 부팅 및 주기적 점검마다 `root` 소유 파일을 "
+            "`1026:100 (775/664)`으로 자동 복구합니다."
         ),
     },
     {
-        "id": "komf-race-condition",
+        "id": "zero-touch-auto-wirer",
         "severity": "HIGH",
-        "severity_label": "부팅 순서 & 바이너리 호환 해결",
-        "service": "Komf ↔ Komga / Kavita",
-        "title": "Komga·Kavita 부팅 완료 전 Komf가 먼저 접속을 시도하여 연결 실패하는 문제",
+        "severity_label": "Zero-Touch REST API 자동 배선",
+        "service": "Auto-Wirer Engine (auto_wirer.py)",
+        "title": "수동 초기 설정이 필요 없는 전 서비스 REST API · SQLite · 확장 리포지토리 Zero-Touch 자동 배선",
         "cause": (
-            "Komga(Spring Boot)와 Kavita(.NET)는 컨테이너 시작 후 실제 웹 포트가 열리기까지 25~60초가 소요됩니다. "
-            "기존 설정은 단순 `depends_on`만 걸려 있고 `healthcheck`가 없어서, Komf가 부팅 직후 아직 열리지 않은 Komga/Kavita API에 "
-            "접속을 시도하다가 Connection Refused 에러를 내며 재시작(`on-failure:5`) 횟수를 소진할 위험이 있었습니다."
+            "컨테이너만 띄워놓으면 사용자가 일일이 Komga, Kavita, Audiobookshelf, CWA, Suwayomi, Readarr에 접속해 "
+            "폴더 경로를 등록하고 확장 프로그램 주소(Keiyoushi)와 다운로드 클라이언트를 수동 입력해야 하는 불편함이 있었습니다."
+        ),
+        "before_snippet": (
+            "# 각 웹 UI에 일일이 접속해 서재 폴더·API 키·확장 리포지토리 수동 등록 필요"
+        ),
+        "after_snippet": (
+            "# auto_wirer.py 가 부팅 직후부터 REST API & DB를 자동 배선:\n"
+            "# Komga·Kavita·ABS 신규 통합 서재 자동 생성 + CWA DB 직결 +\n"
+            "# Suwayomi Keiyoushi 리포지토리 주입 + Readarr↔Prowlarr↔qBittorrent 자동 연동"
+        ),
+        "solution": (
+            "`mediarr-stack`과 동일한 수준의 `auto_wirer.py` 엔진을 탑재하여, 총괄 디렉터님께서 손 하나 까딱하지 않으셔도 "
+            "모든 서재 폴더, API 키, 토렌트 카테고리, 만화 확장 리포지토리가 100% 자동으로 연결됩니다."
+        ),
+    },
+    {
+        "id": "komf-race-and-kaml",
+        "severity": "HIGH",
+        "severity_label": "부팅 순서 & 한국어 메타데이터 완비",
+        "service": "Komf ↔ Komga / Kavita",
+        "title": "Komga·Kavita `service_healthy` 부팅 대기 및 Kaml 파서 호환 한국어(`ko`) 메타데이터 자동 주입",
+        "cause": (
+            "Komga와 Kavita가 완전히 부팅되기 전에 Komf가 먼저 접속을 시도하면 연결 오류가 발생하며, "
+            "기존 Watchtower와 연동할 때도 컨테이너 기동 순서가 보장되어야 합니다."
         ),
         "before_snippet": (
             "depends_on:\n"
             "  - komga\n"
             "  - kavita\n"
-            "# komga, kavita에 healthcheck 없음"
+            "# healthcheck 및 Watchtower depends-on 라벨 부재"
         ),
         "after_snippet": (
             "depends_on:\n"
-            "  komga:\n"
-            "    condition: service_healthy\n"
-            "  kavita:\n"
-            "    condition: service_healthy"
+            "  komga: { condition: service_healthy }\n"
+            "  kavita: { condition: service_healthy }\n"
+            "labels:\n"
+            "  com.centurylinklabs.watchtower.enable: \"true\"\n"
+            "  com.centurylinklabs.watchtower.depends-on: \"ebook-komga,ebook-kavita\""
         ),
         "solution": (
-            "모든 컨테이너에 `curl / wget / /dev/tcp` 3중 폴백(Fallback) 헬스체크를 탑재하여 이미지 내 특정 명령어 유무와 상관없이 "
-            "100% 정확하게 상태를 판별하고, Komf가 반드시 Komga·Kavita 정상 가동(`service_healthy`) 직후 기동되도록 검증했습니다."
-        ),
-    },
-    {
-        "id": "organic-pipeline-linking",
-        "severity": "HIGH",
-        "severity_label": "컨테이너 간 유기적 파이프라인 완성",
-        "service": "CWA · Suwayomi · Komga · Kavita · ABS",
-        "title": "다운로더·변환기·뷰어 간 폴더 및 설정 분리로 인해 유기적 자동화가 끊어지는 문제 해결",
-        "cause": (
-            "기존에는 `/volume1/docker/komga/data`, `/volume1/docker/kavita/data`처럼 각 앱이 자기 폴더만 바라보고 있어서, "
-            "새 책을 다운로드하거나 변환해도 다른 앱에서 동시에 열람할 수 없었습니다."
-        ),
-        "before_snippet": (
-            "komga: /volume1/docker/komga/data:/data:rw\n"
-            "kavita: /volume1/docker/kavita/data:/manga:rw\n"
-            "abs: /volume1/docker/audiobookshelf/audiobooks:/audiobooks:rw"
-        ),
-        "after_snippet": (
-            "# 1) CWA 다운로더 -> /cwa-book-ingest -> CWA 자동 EPUB 변환 -> /calibre-library\n"
-            "# 2) Kavita · ABS · Komga 모두 /calibre-library 및 /data 동시 마운트!\n"
-            "# 3) Suwayomi JVM 옵션으로 /data/manga 에 CBZ 직접 저장 -> Komga·Kavita 즉시 반영!"
-        ),
-        "solution": (
-            "기존 서재 경로(`/legacy-*`)는 그대로 유지해 기존 책 유실을 막으면서, 신규 마스터 볼륨(`/volume1/data/ebooks`)과 "
-            "`/calibre-library`를 전 뷰어가 동시에 공유하도록 연결해 단 1번의 다운로드로 모든 앱에서 즉시 열람되게 구축했습니다."
-        ),
-    },
-    {
-        "id": "komf-kaml-syntax",
-        "severity": "HIGH",
-        "severity_label": "Komf Kaml 파서 문법 완벽 검증",
-        "service": "Komf (Metadata Engine)",
-        "title": "Komf(Kotlin Kaml 파서) 호환 `application.yml` 및 환경변수 오버라이드 자동화",
-        "cause": (
-            "Komf(`sndxr/komf`)는 Spring Boot가 아닌 Kotlin Ktor + Kaml 파서를 사용하므로, `application.yml` 내부에 "
-            "잘못된 변수 치환 문법을 넣으면 파싱 오류가 발생하거나 한국어 메타데이터 수집이 작동하지 않습니다."
-        ),
-        "before_snippet": (
-            "environment:\n"
-            "  - KOMF_KOMGA_BASE_URI=http://komga:25600\n"
-            "# application.yml 상세 프로바이더 설정 없음"
-        ),
-        "after_snippet": (
-            "# Kaml 표준 규격 application.yml 자동 생성 + KOMF_KOMGA_* / KOMF_KAVITA_* 환경변수 자동 주입\n"
-            "# Komga & Kavita 실시간 이벤트 리스너 + 한국어(ko) 최우선 타이틀 매칭"
-        ),
-        "solution": (
-            "`ebook-control-center` 컨테이너가 부팅 시 Kaml 파서 규격에 100% 부합하는 `/volume1/docker/komf/config/application.yml`을 "
-            "자동 생성·검증하여 Komga와 Kavita 양쪽에 한국어 메타데이터와 표지를 자동으로 입혀줍니다."
-        ),
-    },
-    {
-        "id": "single-project-management",
-        "severity": "OPTIMIZATION",
-        "severity_label": "단일 프로젝트 & 통합 컨테이너 관리",
-        "service": "ebook-stack 통합 아키텍처",
-        "title": "프로젝트 도커 이미지(`kimmingil/ebook-stack:latest`)와 단일 `docker-compose.yml`로 전체 통합 관리",
-        "cause": (
-            "여러 폴더나 별도 스크립트로 나뉘어 있으면 유지보수가 번거롭습니다. 하나의 프로젝트(`ebook-stack`) 안에서 "
-            "도커 이미지와 단일 `docker-compose.yml`만으로 모든 초기화·모니터링·DB 최적화·백업이 이뤄져야 합니다."
-        ),
-        "before_snippet": "임시 폴더명(ebook-library) + 수동 스크립트 실행 필요",
-        "after_snippet": (
-            "폴더명: /config/workspace/projects/ebook-stack\n"
-            "통합 관제 컨테이너: ebook-control-center (kimmingil/ebook-stack:latest, :8500)\n"
-            "네트워크: ebook_net (11개 컨테이너 단일 docker-compose.yml 완벽 통합)"
-        ),
-        "solution": (
-            "`docker-compose.yml`(`compose.yaml`) 하나만 실행하면 `ebook-control-center`가 폴더 초기화·DB 마이그레이션·설정 생성·"
-            "정기 SQLite VACUUM 최적화·실시간 상태 점검까지 하나의 프로젝트 안에서 100% 자동으로 관리합니다."
+            "3중 폴백 헬스체크와 Watchtower 종속성 라벨을 전 컨테이너에 적용하고, Komf가 한국어(`ko`) 제목·줄거리·표지를 "
+            "최우선으로 가져오도록 `application.yml`을 자동 프로비저닝합니다."
         ),
     },
 ]
@@ -172,41 +171,39 @@ DIAGNOSIS_REPORT: List[Dict[str, Any]] = [
 ORGANIC_PIPELINES: List[Dict[str, Any]] = [
     {
         "id": "pipeline-ebook",
-        "title": "파이프라인 1: 웹 도서 검색 → 자동 EPUB 변환 → 전 뷰어 동시 열람",
-        "flow": "FlareSolverr(:8191) ➔ CWA Book Downloader(:8084) ➔ [/cwa-book-ingest] ➔ Calibre-Web-Automated(:8083) ➔ [/calibre-library] ➔ Kavita(:5471) & Audiobookshelf(:13378) & Komga(:8341)",
+        "title": "파이프라인 1: 웹 도서 원클릭 검색 ➔ 자동 EPUB/KEPUB 변환 ➔ 4대 뷰어 동시 즉시 열람",
+        "flow": "FlareSolverr(:8192) ➔ CWA Book Downloader(:8084) ➔ [/cwa-book-ingest] ➔ Calibre-Web-Automated(:8083) ➔ [/calibre-library] ➔ Kavita(:5471) & Audiobookshelf(:13378) & Komga(:8341)",
         "description": (
-            "CWA Book Downloader 웹 화면에서 원하는 책(한국어/영어/일본어)을 검색해 다운로드 버튼을 누르면 `/cwa-book-ingest` 공유 볼륨으로 들어갑니다. "
-            "Calibre-Web-Automated가 이를 5초 내로 감지해 EPUB/KEPUB으로 자동 변환하고 표지·메타데이터를 입혀 `/calibre-library`에 저장하며, "
-            "이 폴더를 동시에 마운트하고 있는 Kavita, Audiobookshelf, Komga 서재에 파일 복사 없이 즉시 나타납니다."
+            "CWA Book Downloader(Shelfmark) 웹 화면에서 원하는 책(한국어/영어/일본어)을 검색해 다운로드 버튼을 누르면 `/cwa-book-ingest`로 들어갑니다. "
+            "Calibre-Web-Automated가 이를 5초 내로 감지해 EPUB으로 자동 변환하고 표지·메타데이터를 입혀 `/calibre-library`에 저장하며, "
+            "이 폴더가 이미 자동 등록되어 있는 Kavita, Audiobookshelf, Komga 서재에 파일 복사 없이 즉시 나타납니다."
         ),
     },
     {
         "id": "pipeline-manga",
-        "title": "파이프라인 2: 연재 만화·웹툰 자동 수집 → CBZ 패키징 → 메타데이터 자동 매칭",
-        "flow": "FlareSolverr(:8191) ➔ Suwayomi(:4567) ➔ [/data/manga (*.cbz)] ➔ Komga(:8341) & Kavita(:5471) ➔ Komf(:8085)",
+        "title": "파이프라인 2: 연재 만화·웹툰 신규 회차 자동 수집 ➔ CBZ 압축 저장 ➔ 한국어 메타데이터 자동 주입",
+        "flow": "FlareSolverr(:8192) + Keiyoushi 확장 ➔ Suwayomi(:4567) ➔ [/ebooks/manga (*.cbz)] ➔ Komga(:8341) & Kavita(:5471) ➔ Komf(:8085)",
         "description": (
-            "Suwayomi에 JVM 시스템 프로퍼티(`-Dsuwayomi.tachidesk.config.server.downloadAsCbz=true`, `downloadsPath=/data/manga`, `flareSolverrEnabled=true`)가 "
-            "사전 주입되어 있어, 연재 만화/웹툰의 새 회차가 올라오면 자동으로 `.cbz` 압축 파일로 `/data/manga`에 저장됩니다. "
-            "Komga와 Kavita가 이를 스캔하는 즉시 Komf의 `eventListener`가 작동해 한국어 제목·줄거리·작가·표지를 자동으로 입힙니다."
+            "Suwayomi에 Keiyoushi 공식 만화·웹툰 확장 리포지토리와 CBZ 자동 압축(`downloadAsCbz=true`, `downloadsPath=/ebooks/manga`)이 사전 주입되어 있어, "
+            "새 회차가 올라오면 자동으로 `.cbz` 파일로 `/ebooks/manga`에 저장됩니다. Komga와 Kavita가 이를 스캔하는 즉시 Komf의 `eventListener`가 작동해 한국어 제목·줄거리·작가·표지를 입힙니다."
         ),
     },
     {
         "id": "pipeline-torrent",
-        "title": "파이프라인 3: 토렌트/인덱서 신간 자동 수집 → 0.1초 하드링크 서재 등록",
-        "flow": "Prowlarr/qBittorrent(/volume1/data/torrents) ➔ Readarr(:8787) ➔ [/volume1/data/ebooks/{books,audiobooks}] ➔ Audiobookshelf(:13378) & Kavita(:5471)",
+        "title": "파이프라인 3: Mediarr-Stack 연동 신간 토렌트 수집 ➔ 0.1초 하드링크 서재 등록",
+        "flow": "Mediarr Prowlarr(:9696) & qBittorrent(:8181, /data/torrents/books) ➔ Readarr(:8787) ➔ [/data/ebooks/{books,audiobooks}] ➔ Audiobookshelf(:13378) & Kavita(:5471)",
         "description": (
-            "Readarr가 상위 `/volume1/data` 볼륨을 공유하므로, qBittorrent가 다운로드한 대용량 오디오북이나 전자책 세트를 "
-            "복사 시간 0.1초, 추가 디스크 용량 소모 0바이트(하드링크)로 `/volume1/data/ebooks/audiobooks` 및 `/books`에 즉시 연결합니다."
+            "`auto_wirer.py`가 Readarr(:8787)를 `mediarr-stack`의 Prowlarr(:9696) 및 qBittorrent(:8181)와 자동으로 연결합니다. "
+            "상위 `/volume1/mediarr:/data` 단일 볼륨을 공유하므로 대용량 오디오북이나 전자책 세트를 복사 시간 0.1초, 추가 디스크 소모 0바이트(하드링크)로 서재에 즉시 연결합니다."
         ),
     },
     {
         "id": "pipeline-control",
-        "title": "파이프라인 4: 통합 관제 센터(ebook-control-center) 자동 프로비저닝 & DB 닥터",
-        "flow": "ebook-control-center(:8500, kimmingil/ebook-stack:latest) ➔ ebook_net 내부망 10대 컨테이너 실시간 헬스체크 · API 스캔 트리거 · SQLite VACUUM · 자동 백업",
+        "title": "파이프라인 4: 통합 관제 센터(ebook-control-center) Zero-Touch API 자동 배선 & 24h SQLite WAL 닥터",
+        "flow": "ebook-control-center(:8586, kimmingil/ebook-stack:latest) ➔ Komga · Kavita · ABS · CWA · Suwayomi · Readarr 실시간 REST API 자동 배선 & 24h DB 최적화",
         "description": (
-            "프로젝트 도커 이미지(`kimmingil/ebook-stack:latest`)가 같은 `docker-compose.yml`과 `ebook_net` 안에서 함께 구동되면서, "
-            "부팅 시 폴더/설정 자동 생성과 Audiobookshelf DB 무손실 분리를 수행하고, 웹 UI(:8500)에서 원클릭 DB 최적화(VACUUM), 설정 백업, "
-            "Komga/Kavita 서재 스캔 명령을 직접 실행합니다."
+            "`ebook-control-center(:8586)`가 구동 즉시 기존 서재(`/data`, `/manga`, `/audiobooks`, `캘리버 서재`)를 100% 무손실 보존하면서 "
+            "신규 통합 서재를 각 앱의 REST API로 자동 등록하고, 24시간마다 SQLite 무잠금 WAL 체크포인트(`VACUUM`)와 설정 백업을 수행합니다."
         ),
     },
 ]
@@ -215,21 +212,21 @@ ORGANIC_PIPELINES: List[Dict[str, Any]] = [
 EBOOK_SERVICES_CATALOG: List[Dict[str, Any]] = [
     {
         "id": "ebook-control-center",
-        "name": "eBook Control Center (통합 관제·자동화 엔진)",
+        "name": "eBook Control Center (통합 관제·Auto-Wirer 엔진)",
         "container_name": "ebook-control-center",
         "hostname": "ebook-control-center",
         "category": "control",
         "essential": True,
         "default_enabled": True,
         "image": "kimmingil/ebook-stack:latest",
-        "port": 8500,
+        "port": 8586,
         "internal_port": 8500,
-        "webui_port": 8500,
+        "webui_port": 8586,
         "webui_path": "",
-        "description": "본 프로젝트의 전용 도커 이미지로 구동되는 통합 컨트롤 센터. 컨테이너 부팅 시 폴더 생성·Audiobookshelf DB 무손실 분리·Komf 및 Suwayomi 설정 자동 생성을 수행하고, 웹 대시보드에서 전체 서버 상태 점검·원클릭 서재 스캔·SQLite DB 최적화(VACUUM)·백업을 관리합니다.",
-        "role_badge": "통합 관제 · 자동 초기화 · DB 닥터",
+        "description": "본 프로젝트의 전용 도커 이미지로 구동되는 통합 컨트롤 센터(:8586). 부팅 시 폴더 생성·Audiobookshelf DB 분리·기존 캘리버 서재 무손실 이관을 수행하고, Zero-Touch Auto-Wirer가 Komga·Kavita·ABS·CWA·Suwayomi·Readarr·Prowlarr를 REST API로 자동 배선합니다.",
+        "role_badge": "통합 관제 · Zero-Touch 자동 배선 · DB 닥터",
         "config_dir": None,
-        "tuning_badge": "Auto-Bootstrap + Live API Control",
+        "tuning_badge": "REST API Auto-Wirer + 24h WAL Doctor",
     },
     {
         "id": "komga",
@@ -244,10 +241,10 @@ EBOOK_SERVICES_CATALOG: List[Dict[str, Any]] = [
         "internal_port": 25600,
         "webui_port": 8341,
         "webui_path": "",
-        "description": "만화·웹툰·잡지(CBZ/CBR/PDF/EPUB) 전용 최고급 미디어 서버. 스마트 컬렉션, 읽기 목록, OPDS 스트리밍, Mihon(Tachiyomi)·Panels·Tachimanga 앱 완벽 연동을 지원합니다.",
-        "role_badge": "만화·웹툰 메인 서버",
+        "description": "만화·웹툰·단행본(CBZ/CBR/PDF/EPUB) 메인 서버. 기존 서재(/data: 호빗·삼체·토지·원피스·해리포터 등)를 100% 보존하면서 신규 통합 서재(/ebooks/manga, /ebooks/comics, /calibre-library)가 REST API로 자동 등록됩니다.",
+        "role_badge": "만화·웹툰·단행본 메인 서버",
         "config_dir": "komga",
-        "tuning_badge": "G1GC + Max 3GB RAM + 3중 폴백 헬스체크",
+        "tuning_badge": "기존 서재 100% 승계 + G1GC 3GB 최적화",
     },
     {
         "id": "kavita",
@@ -262,10 +259,10 @@ EBOOK_SERVICES_CATALOG: List[Dict[str, Any]] = [
         "internal_port": 5000,
         "webui_port": 5471,
         "webui_path": "",
-        "description": "라이트노벨(EPUB)·일반 소설·단행본·만화를 아우르는 초고속 하이브리드 전자책 리더. Calibre-Web-Automated의 /calibre-library 와 Suwayomi의 /data/manga 를 동시에 공유합니다.",
+        "description": "라이트노벨(EPUB)·소설·만화 초고속 하이브리드 웹 리더. 기존 서재(/manga) 보존과 함께 Manga & Webtoon, Light Novels, Books & Calibre 서재가 REST API로 자동 생성됩니다.",
         "role_badge": "라이트노벨·EPUB·만화 하이브리드 서버",
         "config_dir": "kavita",
-        "tuning_badge": "PUID/PGID 1026:100 + .NET GC 최적화",
+        "tuning_badge": "기존 서재 보존 + 3종 신규 서재 자동 배선",
     },
     {
         "id": "audiobookshelf",
@@ -277,13 +274,13 @@ EBOOK_SERVICES_CATALOG: List[Dict[str, Any]] = [
         "default_enabled": True,
         "image": "advplyr/audiobookshelf:latest",
         "port": 13378,
-        "internal_port": 80,
+        "internal_port": 13378,
         "webui_port": 13378,
         "webui_path": "",
-        "description": "오디오북(M4B/MP3/FLAC), 팟캐스트 자동 구독·다운로드, 전자책(EPUB) 통합 스트리밍 서버. 중첩 볼륨 버그를 완벽 해결했으며 /calibre-library 도서를 동시에 열람할 수 있습니다.",
+        "description": "오디오북(M4B/MP3/FLAC), 팟캐스트 자동 구독·다운로드, 전자책(EPUB) 통합 스트리밍 서버. 중첩 볼륨 버그를 완치하고 기존 서재(/audiobooks)와 신규 오디오북·전자책·팟캐스트 서재를 모두 자동 연결합니다.",
         "role_badge": "오디오북·팟캐스트·소설 스트리밍",
         "config_dir": "audiobookshelf",
-        "tuning_badge": "중첩 볼륨 분리 완료 + PUID 1026",
+        "tuning_badge": "중첩 볼륨 분리 완료 + REST API 서재 배선",
     },
     {
         "id": "komf",
@@ -298,10 +295,10 @@ EBOOK_SERVICES_CATALOG: List[Dict[str, Any]] = [
         "internal_port": 8085,
         "webui_port": 8085,
         "webui_path": "",
-        "description": "Komga와 Kavita 양쪽에 동시에 연결되어 만화·웹툰·라이트노벨의 제목, 줄거리, 작가, 장르 태그, 고화질 표지를 AniList·MangaUpdates·Bangumi 등에서 자동으로 수집해 입혀주는 엔진입니다.",
-        "role_badge": "Komga·Kavita 메타데이터 자동화",
+        "description": "Komga와 Kavita 양쪽에 동시에 연결되어 만화·웹툰·라이트노벨의 한국어 제목, 줄거리, 작가, 장르 태그, 고화질 표지를 AniList·MangaUpdates·Bangumi 등에서 자동으로 수집해 입혀주는 엔진입니다.",
+        "role_badge": "Komga·Kavita 한국어 메타데이터 자동화",
         "config_dir": "komf",
-        "tuning_badge": "ShenandoahGC 512MB + Kaml 완벽 호환",
+        "tuning_badge": "ShenandoahGC 512MB + 한국어(ko) 최우선",
     },
     {
         "id": "calibre-web-automated",
@@ -316,10 +313,10 @@ EBOOK_SERVICES_CATALOG: List[Dict[str, Any]] = [
         "internal_port": 8083,
         "webui_port": 8083,
         "webui_path": "",
-        "description": "무거운 데스크톱 Calibre를 대체하는 차세대 전자책 자동 변환·관리 서버. /cwa-book-ingest 폴더에 들어온 모든 책을 자동으로 EPUB 변환 후 /calibre-library 에 등록하여 Kavita·ABS·Kobo·Kindle과 즉시 공유합니다.",
+        "description": "기존 '/volume1/docker/calibre/캘리버 서재'를 무손실 승계하며, /cwa-book-ingest 폴더에 들어온 모든 책을 자동으로 EPUB/KEPUB 변환 후 /calibre-library 에 등록하여 Kavita·ABS·Komga·Kobo·Kindle과 즉시 공유합니다.",
         "role_badge": "전자책 자동 변환 & Kobo/Kindle 서버",
         "config_dir": "calibre-web-automated",
-        "tuning_badge": "Auto-Ingest + Kavita/ABS 서재 공유",
+        "tuning_badge": "기존 캘리버 서재 자동 이관 + Auto-Ingest",
     },
     {
         "id": "cwa-book-downloader",
@@ -334,10 +331,10 @@ EBOOK_SERVICES_CATALOG: List[Dict[str, Any]] = [
         "internal_port": 8084,
         "webui_port": 8084,
         "webui_path": "",
-        "description": "웹에서 원하는 도서 제목·저자·ISBN을 검색해 다운로드 버튼만 누르면 /books(/cwa-book-ingest) 폴더로 자동 투입하여 Calibre-Web-Automated, Kavita, Audiobookshelf에 10초 내로 자동 등록시키는 도서 요청 포털입니다.",
+        "description": "웹에서 원하는 도서 제목·저자·ISBN(한국어/영어/일본어)을 검색해 다운로드 버튼만 누르면 /cwa-book-ingest 폴더로 자동 투입하여 Calibre-Web-Automated, Kavita, Audiobookshelf, Komga에 10초 내로 자동 등록시키는 포털입니다.",
         "role_badge": "원클릭 도서 검색·자동 다운로드 포털",
         "config_dir": "cwa-book-downloader",
-        "tuning_badge": "Shelfmark v1.6+ 공식 이미지 + CWA 직결",
+        "tuning_badge": "Shelfmark 공식 이미지 + CWA 직결",
     },
     {
         "id": "suwayomi",
@@ -352,10 +349,10 @@ EBOOK_SERVICES_CATALOG: List[Dict[str, Any]] = [
         "internal_port": 4567,
         "webui_port": 4567,
         "webui_path": "",
-        "description": "Mihon(구 Tachiyomi) 확장 생태계 기반 연재 만화·웹툰 자동 수집 서버. 공식 startup_script.sh 환경변수(DOWNLOAD_AS_CBZ=true, FLARESOLVERR_ENABLED=true)가 사전 적용되어 새 회차를 자동으로 CBZ 압축해 /data/manga(Komga·Kavita 공유 폴더)에 꽂아줍니다.",
+        "description": "Mihon(구 Tachiyomi) 기반 연재 만화·웹툰 자동 수집 서버. Keiyoushi 공식 확장 리포지토리와 CBZ 자동 압축(/ebooks/manga)이 사전 설정되어 새 회차를 자동으로 Komga·Kavita 공유 서재에 꽂아줍니다.",
         "role_badge": "웹툰·만화 신규 회차 자동 수집 서버",
         "config_dir": "suwayomi",
-        "tuning_badge": "CBZ 자동설정 → Komga/Kavita 직결",
+        "tuning_badge": "Keiyoushi 리포지토리 + CBZ 자동 저장",
     },
     {
         "id": "readarr",
@@ -365,15 +362,15 @@ EBOOK_SERVICES_CATALOG: List[Dict[str, Any]] = [
         "category": "automation",
         "essential": False,
         "default_enabled": True,
-        "image": "lscr.io/linuxserver/readarr:nightly",
+        "image": "lscr.io/linuxserver/readarr:0.4.18-develop",
         "port": 8787,
         "internal_port": 8787,
         "webui_port": 8787,
         "webui_path": "",
-        "description": "Prowlarr 및 qBittorrent(/volume1/data/torrents)와 연동하여 신간 전자책·오디오북 토렌트를 자동 다운로드하고 /volume1/data/ebooks 로 0.1초 하드링크 정리하는 매니저입니다.",
+        "description": "Mediarr-Stack의 Prowlarr(:9696) 및 qBittorrent(:8181, /volume1/mediarr)와 자동 연동하여 신간 전자책·오디오북 토렌트를 수집하고 /data/ebooks 로 0.1초 하드링크 정리하는 매니저입니다.",
         "role_badge": "*Arr 전자책·오디오북 자동 수집",
         "config_dir": "readarr",
-        "tuning_badge": "/volume1/data 단일 볼륨 하드링크 완비",
+        "tuning_badge": "Prowlarr·qBittorrent 자동 배선 + 하드링크",
     },
     {
         "id": "stirling-pdf",
@@ -388,28 +385,28 @@ EBOOK_SERVICES_CATALOG: List[Dict[str, Any]] = [
         "internal_port": 8080,
         "webui_port": 8087,
         "webui_path": "",
-        "description": "스캔된 PDF 전공서적·논문·매거진을 위한 올인원 웹 PDF 가공 스튜디오. 한국어(kor)+영어(eng) 광학문자인식(OCR), 양면 스캔 분할, 여백 제거, EPUB 변환을 지원합니다.",
+        "description": "스캔된 PDF 전공서적·논문·매거진을 위한 올인원 웹 PDF 가공 스튜디오. 한국어(ko_KR)+영어 광학문자인식(OCR), 양면 스캔 분할, 여백 제거, EPUB 변환을 지원합니다.",
         "role_badge": "스캔북 한국어 OCR & PDF 스튜디오",
         "config_dir": "stirling-pdf",
-        "tuning_badge": "한국어(kor) OCR + 전자책 변환",
+        "tuning_badge": "한국어(ko_KR) OCR + 전자책 변환",
     },
     {
         "id": "flaresolverr",
-        "name": "FlareSolverr",
+        "name": "FlareSolverr (eBook 전용 프록시)",
         "container_name": "ebook-flaresolverr",
         "hostname": "flaresolverr",
         "category": "utility",
         "essential": False,
         "default_enabled": True,
         "image": "ghcr.io/flaresolverr/flaresolverr:latest",
-        "port": 8191,
+        "port": 8192,
         "internal_port": 8191,
-        "webui_port": 8191,
+        "webui_port": 8192,
         "webui_path": "",
-        "description": "Suwayomi, CWA-Book-Downloader, Readarr가 외부 도서·웹툰 사이트에 접근할 때 발생하는 Cloudflare 보안 검증을 백그라운드에서 자동 통과시켜 줍니다.",
+        "description": "Suwayomi와 CWA-Book-Downloader가 외부 도서·웹툰 사이트에 접근할 때 발생하는 Cloudflare 보안 검증을 백그라운드에서 자동 우회합니다. (호스트 8192 포트로 mediarr 8191과 충돌 제로)",
         "role_badge": "Cloudflare 자동 우회 프록시",
         "config_dir": "flaresolverr",
-        "tuning_badge": "Suwayomi · CWA 다운로더 자동 연동",
+        "tuning_badge": "호스트 :8192 / 내부 flaresolverr:8191",
     },
 ]
 
@@ -444,14 +441,14 @@ CLIENT_APPS_GUIDE: List[Dict[str, Any]] = [
                 "apps": "Kavita 내장 웹 리더 & CWA 내장 웹 리더",
                 "connection": "별도 앱 설치 없이 브라우저 직접 접속 (PWA 홈 화면 추가 지원)",
                 "url_template": "http://{nas_ip}:{kavita_port}",
-                "tip": "Kavita의 내장 EPUB 리더는 나눔명조/리디바탕 웹폰트, 줄간격, 여백, 다크모드 설정이 현존 최고 수준이라 별도 앱 없이도 완벽합니다.",
+                "tip": "Kavita의 내장 EPUB 리더는 웹폰트, 줄간격, 여백, 다크모드 설정이 현존 최고 수준이라 별도 앱 없이도 완벽합니다.",
             },
             {
                 "device": "이북 리더기 (Kobo / Kindle / 크레마 / 오닉스)",
                 "apps": "Kobo 무선 동기화 (CWA) / Send-to-Kindle / KOReader (OPDS)",
                 "connection": "Calibre-Web-Automated Kobo Sync 토큰 또는 OPDS 주소 등록",
                 "url_template": "http://{nas_ip}:{cwa_port}/opds",
-                "tip": "Calibre-Web-Automated는 책을 넣는 즉시 Kobo 전용 포맷(KEPUB)으로 자동 변환하여 Kobo 리더기에서 상점 동기화만 누르면 무선으로 책이 들어옵니다.",
+                "tip": "Calibre-Web-Automated는 책을 넣는 즉시 Kobo 전용 포맷(KEPUB)으로 자동 변환하여 Kobo 리더기에서 무선으로 책이 들어옵니다.",
             },
         ],
     },
