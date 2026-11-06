@@ -75,6 +75,36 @@
   </header>
 
   <main class="max-w-7xl mx-auto px-4 sm:px-6 mt-8 space-y-8">
+    <!-- Top Quick Launcher & External Domain / LAN Mode Switcher -->
+    <section class="glass-card rounded-2xl p-6 border-l-4 border-l-cyan-400">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
+        <div>
+          <h2 class="text-lg sm:text-xl font-extrabold text-white flex items-center gap-2.5">
+            <i class="fa-solid fa-rocket text-cyan-400"></i>
+            <span>통합 eBook 서비스 원클릭 런처 &amp; 외부 도메인(HTTPS) / 내부망(LAN) 자동 스위치</span>
+          </h2>
+          <p class="text-xs sm:text-sm text-slate-300 mt-1">
+            외부에서 역방향 프록시 도메인(예: <code>*.gil9393.synology.me</code>)으로 접속하면 VPN이나 Tailscale 없이도 모든 컨테이너 링크가 <strong>HTTPS 외부 도메인 주소</strong>로 자동 연결됩니다.
+          </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 shrink-0">
+          <div class="flex items-center bg-slate-900 border border-slate-700 rounded-xl p-1">
+            <button id="modeBtnExternal" onclick="setLinkMode('external')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition bg-cyan-600 text-white">
+              <i class="fa-solid fa-globe mr-1"></i>외부 도메인 (HTTPS)
+            </button>
+            <button id="modeBtnLan" onclick="setLinkMode('lan')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition text-slate-400 hover:text-white">
+              <i class="fa-solid fa-network-wired mr-1"></i>내부망 (LAN IP)
+            </button>
+          </div>
+          <button onclick="probeNasPorts()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1.5">
+            <i class="fa-solid fa-rotate"></i>
+            <span>상태 새로고침</span>
+          </button>
+        </div>
+      </div>
+      <div id="topQuickLaunchGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3"></div>
+    </section>
+
     <!-- 0. Organic Inter-Container Pipeline Architecture -->
     <section class="glass-card rounded-2xl p-6 border-l-4 border-l-emerald-500">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
@@ -146,10 +176,14 @@
 
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs font-semibold text-slate-300 mb-1">시놀로지 NAS IP</label>
-              <input id="cfgNasIp" type="text" value="192.168.0.100" onchange="triggerGenerate()" class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white focus:border-indigo-500 focus:outline-none" />
+              <label class="block text-xs font-semibold text-slate-300 mb-1">시놀로지 NAS IP (내부망)</label>
+              <input id="cfgNasIp" type="text" value="192.168.0.100" onchange="triggerGenerate(); probeNasPorts();" class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white focus:border-indigo-500 focus:outline-none" />
             </div>
             <div>
+              <label class="block text-xs font-semibold text-cyan-300 mb-1">외부 접속 도메인 (Reverse Proxy)</label>
+              <input id="cfgBaseDomain" type="text" placeholder="예: gil9393.synology.me" value="" onchange="renderServices(); renderWiringAndClients(); probeNasPorts();" class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-cyan-700/60 text-sm text-white focus:border-cyan-400 focus:outline-none" />
+            </div>
+            <div class="col-span-2">
               <label class="block text-xs font-semibold text-slate-300 mb-1">컨테이너 이름 프리픽스</label>
               <select id="cfgPrefix" onchange="triggerGenerate()" class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white focus:border-indigo-500 focus:outline-none">
                 <option value="ebook-" selected>ebook-* (추천: ebook-komga 등 그룹 정렬)</option>
@@ -297,10 +331,63 @@
     let generatedData = null;
     let selectedServices = new Set();
     let activeTab = 'compose';
+    let linkMode = 'external'; // 'external' or 'lan'
+
+    function detectBaseDomain(defaultFromServer) {
+      const host = (window.location.hostname || '').trim();
+      const isIpOrLocal = !host || host === 'localhost' || /^\d+\.\d+\.\d+\.\d+$/.test(host);
+      if (!isIpOrLocal && host.includes('.')) {
+        const parts = host.split('.');
+        if (parts.length >= 3) {
+          return parts.slice(1).join('.');
+        }
+      }
+      return (defaultFromServer || '').trim();
+    }
+
+    function setLinkMode(mode) {
+      linkMode = mode;
+      const btnExt = document.getElementById('modeBtnExternal');
+      const btnLan = document.getElementById('modeBtnLan');
+      if (mode === 'external') {
+        btnExt.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold transition bg-cyan-600 text-white';
+        btnLan.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold transition text-slate-400 hover:text-white';
+      } else {
+        btnLan.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold transition bg-indigo-600 text-white';
+        btnExt.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold transition text-slate-400 hover:text-white';
+      }
+      renderServices();
+      if (generatedData && activeTab === 'wiring') renderWiringAndClients();
+      probeNasPorts();
+    }
+
+    function getServiceUrl(s) {
+      const nasIp = (document.getElementById('cfgNasIp')?.value || '192.168.0.100').trim();
+      const baseDomain = (document.getElementById('cfgBaseDomain')?.value || '').trim().replace(/^\.+/, '');
+      const path = s.webui_path || '';
+      if (linkMode === 'external' && baseDomain && s.subdomain) {
+        return `https://${s.subdomain}.${baseDomain}${path}`;
+      }
+      if (s.webui_port) {
+        return `http://${nasIp}:${s.webui_port}${path}`;
+      }
+      return '';
+    }
 
     async function initStudio() {
       const res = await fetch('/api/catalog');
       catalogData = await res.json();
+      if (catalogData.default_nas_ip) {
+        document.getElementById('cfgNasIp').value = catalogData.default_nas_ip;
+      }
+      const detectedDomain = detectBaseDomain(catalogData.default_base_domain);
+      if (detectedDomain) {
+        document.getElementById('cfgBaseDomain').value = detectedDomain;
+        linkMode = 'external';
+      } else {
+        linkMode = 'lan';
+      }
+      setLinkMode(linkMode);
       catalogData.services.forEach(s => {
         if (s.default_enabled) selectedServices.add(s.id);
       });
@@ -417,10 +504,15 @@
 
     function renderServices() {
       const grid = document.getElementById('serviceGrid');
+      if (!catalogData || !catalogData.services) return;
       document.getElementById('selectedCount').textContent = selectedServices.size;
       grid.innerHTML = catalogData.services.map(s => {
         const active = selectedServices.has(s.id);
         const portBadge = s.port ? `:${s.port}` : 'Background';
+        const svcUrl = getServiceUrl(s);
+        const openBtn = (svcUrl && s.id !== 'flaresolverr' && s.id !== 'komf')
+          ? `<a href="${svcUrl}" target="_blank" onclick="event.stopPropagation()" class="text-[11px] font-bold px-2.5 py-0.5 rounded bg-cyan-600/30 hover:bg-cyan-500/50 text-cyan-200 border border-cyan-500/40 transition"><i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>열기</a>`
+          : '';
         return `
           <div onclick="toggleService('${s.id}')" class="p-3.5 rounded-xl border border-slate-800 bg-slate-900/75 cursor-pointer transition ${active ? 'svc-card-active' : 'opacity-60 hover:opacity-90'}">
             <div class="flex items-center justify-between gap-2">
@@ -428,13 +520,17 @@
                 <input type="checkbox" ${active ? 'checked' : ''} class="w-4 h-4 accent-indigo-500 pointer-events-none" />
                 <span class="font-bold text-sm text-white">${s.name}</span>
               </div>
-              <span class="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-indigo-300 border border-slate-700">${portBadge}</span>
+              <div class="flex items-center gap-1.5">
+                ${openBtn}
+                <span class="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-indigo-300 border border-slate-700">${portBadge}</span>
+              </div>
             </div>
             <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
               <span class="text-[10px] px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-300 font-semibold">${s.role_badge}</span>
               <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 font-semibold">${s.tuning_badge}</span>
             </div>
-            <p class="text-xs text-slate-300 mt-2 leading-relaxed">${s.description}</p>
+            ${svcUrl ? `<div class="mt-1.5 text-[11px] font-mono text-cyan-300/90 truncate">${svcUrl}</div>` : ''}
+            <p class="text-xs text-slate-300 mt-1.5 leading-relaxed">${s.description}</p>
           </div>
         `;
       }).join('');
@@ -531,6 +627,7 @@
       `).join('');
 
       const cfg = collectConfigPayload();
+      const baseDomain = (document.getElementById('cfgBaseDomain')?.value || '').trim().replace(/^\.+/, '');
       const clientGrid = document.getElementById('clientAppsGrid');
       clientGrid.innerHTML = (catalogData.client_apps_guide || []).map(group => `
         <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
@@ -540,12 +637,19 @@
           </h4>
           <div class="space-y-3">
             ${group.clients.map(c => {
-              const url = c.url_template
+              let url = c.url_template
                 .replace('{nas_ip}', cfg.nas_ip)
                 .replace('{komga_port}', cfg.komga_port)
                 .replace('{kavita_port}', cfg.kavita_port)
                 .replace('{abs_port}', cfg.audiobookshelf_port)
                 .replace('{cwa_port}', 8083);
+              if (linkMode === 'external' && baseDomain) {
+                url = c.url_template
+                  .replace('http://{nas_ip}:{komga_port}', `https://komga.${baseDomain}`)
+                  .replace('http://{nas_ip}:{kavita_port}', `https://kavita.${baseDomain}`)
+                  .replace('http://{nas_ip}:{abs_port}', `https://audiobookshelf.${baseDomain}`)
+                  .replace('http://{nas_ip}:{cwa_port}', `https://calibre.${baseDomain}`);
+              }
               return `
                 <div class="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800/90 space-y-1">
                   <div class="text-xs font-bold text-indigo-300">${c.device}</div>
@@ -592,25 +696,45 @@
     }
 
     async function probeNasPorts() {
-      const nasIp = document.getElementById('cfgNasIp').value.trim() || '192.168.1.100';
+      const nasIp = document.getElementById('cfgNasIp').value.trim() || '192.168.0.100';
+      const baseDomain = (document.getElementById('cfgBaseDomain')?.value || '').trim().replace(/^\.+/, '');
       const grid = document.getElementById('probeResultsGrid');
-      grid.innerHTML = `<div class="col-span-full text-xs text-slate-400">포트 상태 확인 중...</div>`;
+      const topGrid = document.getElementById('topQuickLaunchGrid');
+      grid.innerHTML = `<div class="col-span-full text-xs text-slate-400">포트 및 컨테이너 상태 확인 중...</div>`;
       const res = await fetch('/api/probe-services', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nas_ip: nasIp }),
+        body: JSON.stringify({ nas_ip: nasIp, base_domain: baseDomain, link_mode: linkMode }),
       });
       const data = await res.json();
-      grid.innerHTML = data.results.map(r => `
-        <a href="${r.url}" target="_blank" class="p-3 rounded-xl bg-slate-900 border ${r.reachable ? 'border-emerald-500/50' : 'border-slate-800'} hover:border-indigo-500/50 transition block">
+      const cardHtml = data.results.map(r => `
+        <a href="${r.url}" target="_blank" class="p-3 rounded-xl bg-slate-900 border ${r.reachable ? 'border-emerald-500/50' : 'border-slate-800'} hover:border-cyan-400/70 transition block group">
           <div class="flex items-center justify-between">
-            <span class="text-xs font-bold text-white">${r.name}</span>
+            <span class="text-xs font-bold text-white group-hover:text-cyan-300 transition">${r.name}</span>
             <span class="w-2.5 h-2.5 rounded-full ${r.reachable ? 'bg-emerald-400' : 'bg-amber-400'}"></span>
           </div>
-          <div class="text-[11px] font-mono text-indigo-300 mt-1">:${r.port} (${r.container_name})</div>
-          <div class="text-[11px] text-slate-400 mt-1">${r.status_text}</div>
+          <div class="text-[11px] font-mono text-cyan-300 mt-1 truncate">${r.url}</div>
+          <div class="text-[11px] text-slate-400 mt-1 flex items-center justify-between">
+            <span>${r.status_text}</span>
+            <span class="font-mono text-[10px] text-slate-500">:${r.port}</span>
+          </div>
         </a>
       `).join('');
+      grid.innerHTML = cardHtml;
+      if (topGrid) {
+        topGrid.innerHTML = data.results
+          .filter(r => r.id !== 'flaresolverr')
+          .map(r => `
+            <a href="${r.url}" target="_blank" class="p-3 rounded-xl bg-slate-900/95 border ${r.reachable ? 'border-cyan-500/40' : 'border-slate-800'} hover:border-cyan-400 hover:bg-slate-800/80 transition block group">
+              <div class="flex items-center justify-between gap-1">
+                <span class="text-xs font-bold text-white group-hover:text-cyan-300 truncate">${r.name}</span>
+                <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-cyan-400 shrink-0"></i>
+              </div>
+              <div class="text-[10px] font-mono text-cyan-300/90 mt-1 truncate">${r.url.replace(/^https?:\/\//, '')}</div>
+              <div class="text-[10px] text-emerald-400/90 mt-0.5 truncate">${r.status_text}</div>
+            </a>
+          `).join('');
+      }
     }
 
     window.addEventListener('DOMContentLoaded', initStudio);

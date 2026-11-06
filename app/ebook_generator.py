@@ -125,6 +125,7 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             "      HOST_DOCKER_MOUNT: /host-docker",
             "      HOST_DATA_MOUNT: /host-data",
             f"      NAS_IP: ${{NAS_IP:-{cfg.nas_ip}}}",
+            "      BASE_DOMAIN: ${BASE_DOMAIN:-}",
             f"      KOMGA_USER: ${{KOMGA_USER:-{cfg.komga_user}}}",
             "      KOMGA_PASSWORD: ${KOMGA_PASSWORD:-}",
             "      KAVITA_API_KEY: ${KAVITA_API_KEY:-}",
@@ -614,7 +615,10 @@ def generate_ebook_compose(cfg: EbookStackConfigRequest) -> str:
             f"      TZ: ${{TZ:-{cfg.tz}}}",
             f"      PUID: ${{PUID:-{cfg.puid}}}",
             f"      PGID: ${{PGID:-{cfg.pgid}}}",
-            '      DOCKER_ENABLE_SECURITY: "false"',
+            '      DOCKER_ENABLE_SECURITY: "true"',
+            '      SECURITY_ENABLELOGIN: "true"',
+            "      SECURITY_INITIALLOGIN_USERNAME: ${CONTROL_CENTER_USER:-admin}",
+            "      SECURITY_INITIALLOGIN_PASSWORD: ${CONTROL_CENTER_PASSWORD:-}",
             '      INSTALL_BOOK_AND_ADVANCED_HTML_OPS: "true"',
             "      LANGS: ko_KR",
             "    ports:",
@@ -963,9 +967,10 @@ ABS_JWT_SECRET=CHANGE_ME_TO_A_RANDOM_64_CHAR_SECRET
 # 📖 5. Calibre-Web-Automated 선택 옵션 (Hardcover.app API 토큰 등)
 HARDCOVER_TOKEN=
 
-# 🛡️ 6. eBook Control Center 웹 대시보드 보호 계정 (선택)
+# 🛡️ 6. eBook Control Center 웹 대시보드 보호 계정 & 외부 도메인 (선택)
 CONTROL_CENTER_USER=admin
 CONTROL_CENTER_PASSWORD=
+BASE_DOMAIN=
 """
 
 

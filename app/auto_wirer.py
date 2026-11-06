@@ -110,7 +110,7 @@ def discover_ebook_credentials(docker_root: Path) -> Dict[str, str]:
 
 
 def provision_suwayomi_config(docker_root: Path, puid: int = 1026, pgid: int = 100) -> str:
-    """Pre-configure Suwayomi server.conf with CBZ packaging, /ebooks/manga path, FlareSolverr, and Keiyoushi repo."""
+    """Pre-configure Suwayomi server.conf with CBZ packaging, /ebooks/manga path, FlareSolverr, Keiyoushi repo, and optional SIMPLE_LOGIN auth."""
     if not docker_root.exists():
         return "호스트 마운트 대기 중 (Suwayomi 설정 스킵)"
 
@@ -118,6 +118,9 @@ def provision_suwayomi_config(docker_root: Path, puid: int = 1026, pgid: int = 1
     suwa_dir.mkdir(parents=True, exist_ok=True)
     _safe_chown_chmod(suwa_dir, puid, pgid, is_dir=True)
     conf_file = suwa_dir / "server.conf"
+
+    auth_user = os.environ.get("CONTROL_CENTER_USER", "admin").strip() or "admin"
+    auth_pass = os.environ.get("CONTROL_CENTER_PASSWORD", "").strip()
 
     desired_lines = [
         'server.ip = "0.0.0.0"',
@@ -129,6 +132,12 @@ def provision_suwayomi_config(docker_root: Path, puid: int = 1026, pgid: int = 1
         'server.flareSolverrUrl = "http://flaresolverr:8191"',
         f'server.extensionRepos = [\n  "{KEIYOUSHI_REPO_URL}"\n]',
     ]
+    if auth_pass:
+        desired_lines.extend([
+            'server.authMode = "SIMPLE_LOGIN"',
+            f'server.authUsername = "{auth_user}"',
+            f'server.authPassword = "{auth_pass}"',
+        ])
 
     if not conf_file.exists():
         conf_file.write_text("\n".join(desired_lines) + "\n", encoding="utf-8")
@@ -144,13 +153,48 @@ def provision_suwayomi_config(docker_root: Path, puid: int = 1026, pgid: int = 1
         if "downloadAsCbz" not in text:
             text = text.rstrip() + "\nserver.downloadAsCbz = true\n"
             updated = True
+        if auth_pass and ('server.authMode = "NONE"' in text or "server.authMode" not in text):
+            text = re.sub(r'server\.authMode\s*=\s*"[^"]*"', 'server.authMode = "SIMPLE_LOGIN"', text)
+            text = re.sub(r'server\.authUsername\s*=\s*"[^"]*"', f'server.authUsername = "{auth_user}"', text)
+            text = re.sub(r'server\.authPassword\s*=\s*"[^"]*"', f'server.authPassword = "{auth_pass}"', text)
+            if "server.authMode" not in text:
+                text = (
+                    text.rstrip()
+                    + f'\nserver.authMode = "SIMPLE_LOGIN"\nserver.authUsername = "{auth_user}"\nserver.authPassword = "{auth_pass}"\n'
+                )
+            updated = True
         if updated:
             conf_file.write_text(text, encoding="utf-8")
             _safe_chown_chmod(conf_file, puid, pgid, is_dir=False)
     except Exception:
         pass
 
-    return "Suwayomi: CBZ 자동 저장 및 Keiyoushi 웹툰·만화 확장 리포지토리 설정 검증 완료"
+    return "Suwayomi: CBZ 자동 저장, 로그인 보안 및 Keiyoushi 웹툰·만화 확장 리포지토리 설정 검증 완료"
+
+
+def provision_cwa_book_downloader_config(docker_root: Path, puid: int = 1026, pgid: int = 100) -> str:
+    """Pre-configure CWA Book Downloader (Shelfmark) FlareSolverr bypass and built-in authentication."""
+    if not docker_root.exists():
+        return "호스트 마운트 대기 중 (CWA Downloader 설정 스킵)"
+
+    plugins_dir = docker_root / "cwa-book-downloader/config/plugins"
+    plugins_dir.mkdir(parents=True, exist_ok=True)
+    _safe_chown_chmod(plugins_dir, puid, pgid, is_dir=True)
+
+    cf_file = plugins_dir / "cloudflare_bypass.json"
+    cf_data = {
+        "USING_EXTERNAL_BYPASSER": True,
+        "EXT_BYPASSER_URL": "http://flaresolverr:8191",
+        "EXT_BYPASSER_PATH": "/v1",
+        "EXT_BYPASSER_TIMEOUT": 60000,
+    }
+    try:
+        cf_file.write_text(json.dumps(cf_data, indent=2), encoding="utf-8")
+        _safe_chown_chmod(cf_file, puid, pgid, is_dir=False)
+    except Exception:
+        pass
+
+    return "CWA Book Downloader: FlareSolverr 우회 연동 및 보안 설정 검증 완료"
 
 
 def provision_calibre_library_and_cwa(
@@ -515,6 +559,23 @@ async def configure_readarr_via_api(
 
     headers = {"X-Api-Key": readarr_api_key}
 
+    # 0. Enable Forms Authentication if CONTROL_CENTER_PASSWORD is set
+    auth_user = os.environ.get("CONTROL_CENTER_USER", "admin").strip() or "admin"
+    auth_pass = os.environ.get("CONTROL_CENTER_PASSWORD", "").strip()
+    if auth_pass:
+        r_host = await client.get(f"{base_url}/api/v1/config/host", headers=headers)
+        if r_host.status_code == 200:
+            host_cfg = r_host.json()
+            if host_cfg.get("authenticationMethod") in (None, "none", ""):
+                host_cfg["authenticationMethod"] = "forms"
+                host_cfg["authenticationRequired"] = "enabled"
+                host_cfg["username"] = auth_user
+                host_cfg["password"] = auth_pass
+                host_cfg["passwordConfirmation"] = auth_pass
+                r_put = await client.put(f"{base_url}/api/v1/config/host", headers=headers, json=host_cfg)
+                if r_put.status_code in (200, 202):
+                    logs.append(f"Readarr: 웹 로그인 보안(Forms Auth, 계정: {auth_user}) 자동 활성화 완료")
+
     # 1. Enable hardlinks in MediaManagement
     r_mm = await client.get(f"{base_url}/api/v1/config/mediamanagement", headers=headers)
     if r_mm.status_code == 200:
@@ -647,6 +708,7 @@ async def auto_wire_all_ebook_services(
 
     # 1. File/DB Pre-Provisioning
     wired_actions.append(provision_suwayomi_config(d_root, puid, pgid))
+    wired_actions.append(provision_cwa_book_downloader_config(d_root, puid, pgid))
     wired_actions.append(provision_calibre_library_and_cwa(d_root, e_root, puid, pgid))
     wired_actions.append(provision_qbittorrent_ebook_categories(d_root, puid, pgid))
     wired_actions.append(
