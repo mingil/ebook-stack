@@ -125,6 +125,8 @@ def provision_suwayomi_config(docker_root: Path, puid: int = 1026, pgid: int = 1
     desired_lines = [
         'server.ip = "0.0.0.0"',
         "server.port = 4567",
+        'server.webUIChannel = "BUNDLED"',
+        "server.webUIUpdateCheckInterval = 0",
         'server.downloadsPath = "/ebooks/manga"',
         "server.downloadAsCbz = true",
         "server.autoDownloadNewChapters = true",
@@ -152,6 +154,10 @@ def provision_suwayomi_config(docker_root: Path, puid: int = 1026, pgid: int = 1
             updated = True
         if "downloadAsCbz" not in text:
             text = text.rstrip() + "\nserver.downloadAsCbz = true\n"
+            updated = True
+        if 'server.webUIChannel = "STABLE"' in text or 'server.webUIChannel = "PREVIEW"' in text:
+            text = re.sub(r'server\.webUIChannel\s*=\s*"[^"]*"', 'server.webUIChannel = "BUNDLED"', text)
+            text = re.sub(r'server\.webUIUpdateCheckInterval\s*=\s*\d+', 'server.webUIUpdateCheckInterval = 0', text)
             updated = True
         if auth_pass and ('server.authMode = "NONE"' in text or "server.authMode" not in text):
             text = re.sub(r'server\.authMode\s*=\s*"[^"]*"', 'server.authMode = "SIMPLE_LOGIN"', text)
@@ -636,6 +642,15 @@ async def configure_readarr_via_api(
             )
             if r_post.status_code in (200, 201):
                 logs.append(f"Readarr: Mediarr qBittorrent({qbit_host}:{qbit_port}, 카테고리 books) 자동 연결 완료")
+
+    # 4. Ensure Remote Path Mapping (/downloads/ -> /data/torrents/) so legacy qBittorrent items never trigger health warnings
+    r_rpm = await client.get(f"{base_url}/api/v1/remotepathmapping", headers=headers)
+    if r_rpm.status_code == 200:
+        existing_rpms = r_rpm.json()
+        if not any(m.get("remotePath") == "/downloads/" for m in existing_rpms):
+            rpm_payload = {"host": qbit_host, "remotePath": "/downloads/", "localPath": "/data/torrents/"}
+            await client.post(f"{base_url}/api/v1/remotepathmapping", headers=headers, json=rpm_payload)
+            logs.append("Readarr: qBittorrent 레거시 경로(/downloads/ ➔ /data/torrents/) 리모트 패스 매핑 자동 등록 완료")
 
     return logs
 

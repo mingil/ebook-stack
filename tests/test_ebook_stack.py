@@ -251,7 +251,7 @@ def test_zero_touch_auto_wirer_rest_apis(tmp_path: Path):
     assert len(k_logs) == 4  # 1 legacy scanInterval upgrade + 3 new libraries
     assert len(kv_logs) == 3  # 3 new Kavita libraries
     assert len(abs_logs) == 3  # 3 new ABS libraries
-    assert len(rd_logs) == 4  # Hardlinks + 2 RootFolders + qBittorrent client
+    assert len(rd_logs) == 5  # Hardlinks + 2 RootFolders + qBittorrent client + RemotePathMapping
     assert len(pr_logs) == 1  # Readarr FullSync in Prowlarr
 
 
